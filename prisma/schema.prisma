@@ -1,0 +1,332 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  OWNER
+  BARBER
+  RECEPTIONIST
+}
+
+enum AppointmentStatus {
+  CONFIRMED
+  PENDING
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum DepositStatus {
+  NONE
+  PENDING
+  PAID
+  REFUNDED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum NotificationType {
+  APPOINTMENT
+  REMINDER
+  SYSTEM
+  INVITE
+}
+
+model Barbershop {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  address     String?
+  phone       String?
+  instagram   String?
+  timezone    String   @default("America/Los_Angeles")
+  twilioPhone String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users         User[]
+  barbers       Barber[]
+  services      Service[]
+  appointments  Appointment[]
+  clients       Client[]
+  businessHours BusinessHour[]
+  holidays      Holiday[]
+  invitations   Invitation[]
+  notifications Notification[]
+  smsLogs       SmsLog[]
+
+  @@map("barbershops")
+}
+
+model User {
+  id           String   @id
+  email        String   @unique
+  name         String?
+  avatarUrl    String?
+  role         UserRole @default(BARBER)
+  barbershopId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  barber     Barber?
+
+  @@index([barbershopId])
+  @@map("users")
+}
+
+model Barber {
+  id           String   @id @default(cuid())
+  userId       String?  @unique
+  barbershopId String
+  name         String
+  email        String
+  phone        String?
+  photoUrl     String?
+  color        String   @default("#007AFF")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  barbershop   Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  workingHours WorkingHour[]
+  services     BarberService[]
+  appointments Appointment[]
+  favoriteClients Client[] @relation("FavoriteBarber")
+
+  @@index([barbershopId])
+  @@map("barbers")
+}
+
+model Service {
+  id           String   @id @default(cuid())
+  barbershopId String
+  name         String
+  description  String?
+  duration     Int
+  price        Decimal  @db.Decimal(10, 2)
+  color        String   @default("#34C759")
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  barbershop   Barbershop      @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  barbers      BarberService[]
+  appointments Appointment[]
+
+  @@index([barbershopId])
+  @@map("services")
+}
+
+model BarberService {
+  barberId  String
+  serviceId String
+
+  barber  Barber  @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([barberId, serviceId])
+  @@map("barber_services")
+}
+
+model Client {
+  id              String   @id @default(cuid())
+  barbershopId    String
+  name            String
+  phone           String
+  email           String?
+  notes           String?
+  favoriteBarberId String?
+  visitCount      Int      @default(0)
+  lastVisitAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  barbershop     Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  favoriteBarber Barber?       @relation("FavoriteBarber", fields: [favoriteBarberId], references: [id], onDelete: SetNull)
+  appointments   Appointment[]
+
+  @@unique([barbershopId, phone])
+  @@index([barbershopId, name])
+  @@index([barbershopId, email])
+  @@map("clients")
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  barbershopId  String
+  clientId      String
+  barberId      String
+  serviceId     String
+  startTime     DateTime
+  endTime       DateTime
+  duration      Int
+  notes         String?
+  status        AppointmentStatus @default(PENDING)
+  depositStatus DepositStatus     @default(NONE)
+  depositAmount Decimal?          @db.Decimal(10, 2)
+  source        String            @default("manual")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  client     Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  barber     Barber     @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  service    Service    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  smsLogs    SmsLog[]
+
+  @@index([barbershopId, startTime])
+  @@index([barberId, startTime])
+  @@index([clientId])
+  @@map("appointments")
+}
+
+model BusinessHour {
+  id           String @id @default(cuid())
+  barbershopId String
+  dayOfWeek    Int
+  openTime     String
+  closeTime    String
+  isClosed     Boolean @default(false)
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@unique([barbershopId, dayOfWeek])
+  @@map("business_hours")
+}
+
+model WorkingHour {
+  id        String  @id @default(cuid())
+  barberId  String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  isOff     Boolean @default(false)
+
+  barber Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@unique([barberId, dayOfWeek])
+  @@map("working_hours")
+}
+
+model Holiday {
+  id           String   @id @default(cuid())
+  barbershopId String
+  name         String
+  date         DateTime @db.Date
+  isClosed     Boolean  @default(true)
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([barbershopId, date])
+  @@map("holidays")
+}
+
+model Invitation {
+  id           String           @id @default(cuid())
+  barbershopId String
+  email        String
+  role         UserRole         @default(BARBER)
+  token        String           @unique @default(cuid())
+  status       InvitationStatus @default(PENDING)
+  expiresAt    DateTime
+  createdAt    DateTime         @default(now())
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([barbershopId])
+  @@map("invitations")
+}
+
+model Notification {
+  id           String           @id @default(cuid())
+  barbershopId String
+  title        String
+  message      String
+  type         NotificationType @default(SYSTEM)
+  isRead       Boolean          @default(false)
+  metadata     Json?
+  createdAt    DateTime         @default(now())
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([barbershopId, createdAt])
+  @@map("notifications")
+}
+
+model SmsLog {
+  id            String   @id @default(cuid())
+  barbershopId  String
+  appointmentId String?
+  to            String
+  body          String
+  type          String
+  status        String   @default("sent")
+  twilioSid     String?
+  createdAt     DateTime @default(now())
+
+  barbershop  Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([barbershopId, createdAt])
+  @@map("sms_logs")
+}
+
+model PhoneBookingSession {
+  id           String   @id @default(cuid())
+  callSid      String   @unique
+  barbershopId String?
+  step         String   @default("menu")
+  data         Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("phone_booking_sessions")
+}
+
+enum ReceptionistSessionStatus {
+  ACTIVE
+  AWAITING_CONFIRMATION
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  FAILED
+}
+
+model ReceptionistCallSession {
+  id             String                     @id @default(cuid())
+  callSid        String                     @unique
+  callerPhone    String
+  barbershopId   String?
+  intent         String?
+  clientName     String?
+  serviceName    String?
+  barberName     String?
+  preferredDate  String?
+  preferredTime  String?
+  awaitingField  String?
+  appointmentId  String?
+  status         ReceptionistSessionStatus  @default(ACTIVE)
+  turnCount      Int                        @default(0)
+  context        Json                       @default("{}")
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  expiresAt      DateTime
+
+  @@index([status, expiresAt])
+  @@index([callerPhone])
+  @@map("receptionist_call_sessions")
+}
