@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/db";
-import { requireUser, canManageShop } from "@/lib/auth";
+import { requireShopUser, canManageShop } from "@/lib/auth";
 import { appointmentSchema, serviceSchema, shopSettingsSchema, inviteSchema } from "@/lib/validators";
 import { addMinutes } from "@/lib/dates";
 import { revalidatePath } from "next/cache";
@@ -10,6 +10,7 @@ import {
   buildBookingConfirmationSms,
   buildCancellationSms,
   buildRescheduleSms,
+  normalizePhone,
 } from "@/lib/twilio";
 import { formatTime, formatShortDate } from "@/lib/dates";
 import {
@@ -21,7 +22,7 @@ import { serializeForClient } from "@/lib/serializers";
 import { UserRole } from "@prisma/client";
 
 export async function createAppointment(data: unknown) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   const parsed = appointmentSchema.safeParse(data);
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message };
@@ -115,7 +116,7 @@ export async function createAppointment(data: unknown) {
 }
 
 export async function updateAppointment(id: string, data: unknown) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   const parsed = appointmentSchema.partial().safeParse(data);
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message };
@@ -180,7 +181,7 @@ export async function updateAppointment(id: string, data: unknown) {
 }
 
 export async function deleteAppointment(id: string) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   const existing = await prisma.appointment.findFirst({
     where: { id, barbershopId: user.barbershopId },
   });
@@ -197,7 +198,7 @@ export async function deleteAppointment(id: string) {
 }
 
 export async function getAppointments(start: string, end: string, barberId?: string) {
-  const user = await requireUser();
+  const user = await requireShopUser();
 
   const where: Record<string, unknown> = {
     barbershopId: user.barbershopId,
@@ -225,7 +226,7 @@ export async function getAppointments(start: string, end: string, barberId?: str
 }
 
 export async function createService(data: unknown) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   if (!canManageShop(user.role)) return { error: "Unauthorized" };
 
   const parsed = serviceSchema.safeParse(data);
@@ -243,7 +244,7 @@ export async function createService(data: unknown) {
 }
 
 export async function updateService(id: string, data: unknown) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   if (!canManageShop(user.role)) return { error: "Unauthorized" };
 
   const parsed = serviceSchema.safeParse(data);
@@ -259,7 +260,7 @@ export async function updateService(id: string, data: unknown) {
 }
 
 export async function deleteService(id: string) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   if (!canManageShop(user.role)) return { error: "Unauthorized" };
 
   await prisma.service.update({
@@ -272,15 +273,26 @@ export async function deleteService(id: string) {
 }
 
 export async function updateShopSettings(data: unknown) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   if (!canManageShop(user.role)) return { error: "Unauthorized" };
 
   const parsed = shopSettingsSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message };
 
+  const twilioPhone = parsed.data.twilioPhone?.trim()
+    ? normalizePhone(parsed.data.twilioPhone)
+    : null;
+
   const shop = await prisma.barbershop.update({
     where: { id: user.barbershopId },
-    data: parsed.data,
+    data: {
+      name: parsed.data.name,
+      address: parsed.data.address || null,
+      phone: parsed.data.phone || null,
+      instagram: parsed.data.instagram || null,
+      timezone: parsed.data.timezone,
+      twilioPhone,
+    },
   });
 
   revalidatePath("/settings");
@@ -288,7 +300,7 @@ export async function updateShopSettings(data: unknown) {
 }
 
 export async function inviteTeamMember(data: unknown) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   if (!canManageShop(user.role)) return { error: "Unauthorized" };
 
   const parsed = inviteSchema.safeParse(data);
@@ -314,7 +326,7 @@ export async function inviteTeamMember(data: unknown) {
 }
 
 export async function removeBarber(barberId: string) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   if (!canManageShop(user.role)) return { error: "Unauthorized" };
 
   await prisma.barber.update({
@@ -327,7 +339,7 @@ export async function removeBarber(barberId: string) {
 }
 
 export async function searchClients(query: string) {
-  const user = await requireUser();
+  const user = await requireShopUser();
   const q = query.trim();
   if (!q) return [];
 
@@ -355,7 +367,7 @@ export async function searchClients(query: string) {
 }
 
 export async function getDashboardData() {
-  const user = await requireUser();
+  const user = await requireShopUser();
   const now = new Date();
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);

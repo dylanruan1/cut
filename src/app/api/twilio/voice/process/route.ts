@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/db";
 import {
   generateTwimlResponse,
   twimlSpeechGather,
@@ -17,9 +16,12 @@ import {
   summarizeSession,
   isContinuableSession,
   GREETING,
-  type ShopContext,
   type CallSessionContext,
 } from "@/lib/ai-receptionist";
+import {
+  resolveShopForTwilioTo,
+  UNCONNECTED_NUMBER_MESSAGE,
+} from "@/lib/ai-receptionist/shop-resolve";
 
 function appBaseUrl(request: NextRequest): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
@@ -57,13 +59,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const shop = await loadShopContext(to);
+    const { shop } = await resolveShopForTwilioTo(to);
     if (!shop) {
-      return twimlXml(
-        twimlSay(
-          "Thanks for calling. Our booking system isn't ready yet. Please try again later. Goodbye."
-        )
-      );
+      console.warn("[twilio/voice/process] unmatched To number", { to });
+      return twimlXml(twimlSay(UNCONNECTED_NUMBER_MESSAGE));
     }
 
     const callerPhone = from ? normalizePhone(from) : "+10000000000";
@@ -155,6 +154,7 @@ export async function POST(request: NextRequest) {
       confirmed: response.parsed.confirmed,
       missingFields: response.parsed.missingFields,
       awaitingField: response.awaitingField,
+      barbershopId: shop.id,
     });
 
     session = await mergeParsedRequestIntoSession(callSid, response.parsed, {
@@ -191,6 +191,8 @@ export async function POST(request: NextRequest) {
       created: Boolean(response.bookingResult?.success && response.bookingResult.appointmentId),
       appointmentId: response.bookingResult?.appointmentId ?? null,
       bookingError: response.bookingResult?.error ?? null,
+      clientName: session.clientName,
+      shopId: shop.id,
     });
 
     if (response.sessionComplete) {
@@ -222,61 +224,4 @@ function twimlXml(content: string) {
   return new NextResponse(generateTwimlResponse(content), {
     headers: { "Content-Type": "text/xml" },
   });
-}
-
-async function loadShopContext(toNumber: string): Promise<ShopContext | null> {
-  try {
-    let shop = null as Awaited<ReturnType<typeof prisma.barbershop.findFirst>>;
-
-    if (toNumber) {
-      shop = await prisma.barbershop.findFirst({
-        where: { twilioPhone: normalizePhone(toNumber) },
-      });
-    }
-
-    if (!shop) {
-      shop = await prisma.barbershop.findFirst({ orderBy: { createdAt: "asc" } });
-    }
-
-    if (!shop) return null;
-
-    const [services, barbers, businessHours] = await Promise.all([
-      prisma.service.findMany({
-        where: { barbershopId: shop.id, isActive: true },
-        orderBy: { sortOrder: "asc" },
-        select: { id: true, name: true, duration: true },
-      }),
-      prisma.barber.findMany({
-        where: { barbershopId: shop.id, isActive: true },
-        select: { id: true, name: true },
-      }),
-      prisma.businessHour.findMany({
-        where: { barbershopId: shop.id },
-        orderBy: { dayOfWeek: "asc" },
-      }),
-    ]);
-
-    return {
-      id: shop.id,
-      name: shop.name,
-      address: shop.address,
-      phone: shop.phone,
-      timezone: shop.timezone || "America/Los_Angeles",
-      services: services.map((s) => ({
-        id: s.id,
-        name: s.name,
-        duration: s.duration,
-      })),
-      barbers,
-      businessHours: businessHours.map((h) => ({
-        dayOfWeek: h.dayOfWeek,
-        openTime: h.openTime,
-        closeTime: h.closeTime,
-        isClosed: h.isClosed,
-      })),
-    };
-  } catch (error) {
-    console.warn("[twilio/voice/process] shop load failed:", error);
-    return null;
-  }
 }

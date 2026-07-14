@@ -152,7 +152,7 @@ export async function updateCallSession(
   callSid: string,
   partialData: SessionUpdate
 ): Promise<ReceptionistCallSession> {
-  const data: Prisma.ReceptionistCallSessionUpdateInput = {
+  const data: Prisma.ReceptionistCallSessionUncheckedUpdateInput = {
     expiresAt: partialData.expiresAt ?? defaultExpiresAt(),
   };
 

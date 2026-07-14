@@ -2,18 +2,23 @@
 
 import prisma from "@/lib/db";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { signupSchema, loginSchema, forgotPasswordSchema } from "@/lib/validators";
-import { DEFAULT_SERVICES } from "@/lib/dates";
-import { generateSlug } from "@/lib/utils";
+import {
+  signupSchema,
+  loginSchema,
+  forgotPasswordSchema,
+  onboardingSchema,
+} from "@/lib/validators";
+import { createBarbershopWithOwner } from "@/lib/barbershop";
 import { UserRole } from "@prisma/client";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { requireUser, switchActiveBarbershop } from "@/lib/auth";
 
 export async function signUp(formData: FormData) {
   const raw = {
     name: formData.get("name") as string,
     email: formData.get("email") as string,
     password: formData.get("password") as string,
-    shopName: formData.get("shopName") as string,
   };
 
   const parsed = signupSchema.safeParse(raw);
@@ -21,7 +26,7 @@ export async function signUp(formData: FormData) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input" };
   }
 
-  const { name, email, password, shopName } = parsed.data;
+  const { name, email, password } = parsed.data;
   const supabase = await createClient();
 
   const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -41,76 +46,54 @@ export async function signUp(formData: FormData) {
     return { error: "Failed to create account" };
   }
 
-  const slug = generateSlug(shopName);
-  const existingShop = await prisma.barbershop.findUnique({ where: { slug } });
-  const finalSlug = existingShop ? `${slug}-${Date.now()}` : slug;
-
-  const barbershop = await prisma.barbershop.create({
-    data: {
-      name: shopName,
-      slug: finalSlug,
-      timezone: "America/Los_Angeles",
-      businessHours: {
-        create: Array.from({ length: 7 }, (_, i) => ({
-          dayOfWeek: i,
-          openTime: i === 0 ? "00:00" : "09:00",
-          closeTime: i === 0 ? "00:00" : "18:00",
-          isClosed: i === 0,
-        })),
-      },
-      services: {
-        create: DEFAULT_SERVICES.map((s, i) => ({
-          name: s.name,
-          description: s.description,
-          duration: s.duration,
-          price: s.price,
-          color: s.color,
-          sortOrder: i,
-        })),
-      },
-    },
-  });
-
+  // Account only — shop is created during onboarding.
   await prisma.user.create({
     data: {
       id: authData.user.id,
       email,
       name,
       role: UserRole.OWNER,
-      barbershopId: barbershop.id,
+      barbershopId: null,
     },
-  });
-
-  const ownerBarber = await prisma.barber.create({
-    data: {
-      barbershopId: barbershop.id,
-      userId: authData.user.id,
-      name,
-      email,
-      color: "#007AFF",
-      workingHours: {
-        create: Array.from({ length: 7 }, (_, i) => ({
-          dayOfWeek: i,
-          startTime: i === 0 ? "00:00" : "09:00",
-          endTime: i === 0 ? "00:00" : "18:00",
-          isOff: i === 0,
-        })),
-      },
-    },
-  });
-
-  const services = await prisma.service.findMany({
-    where: { barbershopId: barbershop.id },
-  });
-
-  await prisma.barberService.createMany({
-    data: services.map((s) => ({
-      barberId: ownerBarber.id,
-      serviceId: s.id,
-    })),
   });
 
   return { success: true, message: "Check your email to verify your account" };
+}
+
+export async function completeOnboarding(formData: FormData) {
+  const user = await requireUser();
+
+  if (user.barbershopId && user.memberships.length > 0) {
+    redirect("/dashboard");
+  }
+
+  const raw = {
+    shopName: formData.get("shopName") as string,
+    timezone: (formData.get("timezone") as string) || "America/Los_Angeles",
+  };
+
+  const parsed = onboardingSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { error: parsed.error.errors[0]?.message ?? "Invalid input" };
+  }
+
+  await createBarbershopWithOwner({
+    name: parsed.data.shopName,
+    timezone: parsed.data.timezone,
+    ownerUserId: user.id,
+    ownerName: user.name ?? user.email.split("@")[0],
+    ownerEmail: user.email,
+  });
+
+  revalidatePath("/");
+  redirect("/dashboard");
+}
+
+export async function setActiveShop(barbershopId: string) {
+  const result = await switchActiveBarbershop(barbershopId);
+  if ("error" in result) return result;
+  revalidatePath("/");
+  return { success: true as const };
 }
 
 export async function signIn(formData: FormData) {
@@ -189,6 +172,13 @@ export async function acceptInvite(token: string, name: string, password: string
         name,
         role: invitation.role,
         barbershopId: invitation.barbershopId,
+      },
+    }),
+    prisma.barbershopMembership.create({
+      data: {
+        userId: authData.user.id,
+        barbershopId: invitation.barbershopId,
+        role: invitation.role,
       },
     }),
     prisma.barber.create({

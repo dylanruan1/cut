@@ -160,6 +160,7 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
       ? combineDateAndTime(parsed.preferredDate, parsed.preferredTime, timezone)
       : new Date(slot.startTime);
   const endTime = addMinutes(startTime, service.duration);
+  // Always prefer the name spoken on this call — never dashboard/auth user name.
   const clientName = parsed.clientName?.trim() || "Phone Customer";
 
   let client = await prisma.client.findUnique({
@@ -179,7 +180,20 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
         phone: callerPhone,
       },
     });
-  } else if (parsed.clientName && client.name === "Phone Customer") {
+  } else if (
+    parsed.clientName?.trim() &&
+    client.name.trim().toLowerCase() !== clientName.toLowerCase()
+  ) {
+    console.log(
+      "[ai-receptionist/booking] phone matched existing client with different name",
+      {
+        clientId: client.id,
+        phone: callerPhone,
+        existingName: client.name,
+        callerProvidedName: clientName,
+      }
+    );
+    // Update only after booking confirmation (this path runs post-confirm).
     client = await prisma.client.update({
       where: { id: client.id },
       data: { name: clientName },

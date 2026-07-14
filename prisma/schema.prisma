@@ -51,39 +51,61 @@ model Barbershop {
   phone       String?
   instagram   String?
   timezone    String   @default("America/Los_Angeles")
-  twilioPhone String?
+  twilioPhone String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  users         User[]
-  barbers       Barber[]
-  services      Service[]
-  appointments  Appointment[]
-  clients       Client[]
-  businessHours BusinessHour[]
-  holidays      Holiday[]
-  invitations   Invitation[]
-  notifications Notification[]
-  smsLogs       SmsLog[]
+  users                    User[]
+  memberships              BarbershopMembership[]
+  barbers                  Barber[]
+  services                 Service[]
+  appointments             Appointment[]
+  clients                  Client[]
+  businessHours            BusinessHour[]
+  holidays                 Holiday[]
+  invitations              Invitation[]
+  notifications            Notification[]
+  smsLogs                  SmsLog[]
+  receptionistCallSessions ReceptionistCallSession[]
 
   @@map("barbershops")
 }
 
 model User {
-  id           String   @id
-  email        String   @unique
+  id           String    @id
+  email        String    @unique
   name         String?
   avatarUrl    String?
-  role         UserRole @default(BARBER)
-  barbershopId String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  /// Role for the currently selected (active) barbershop. Prefer membership.role for multi-shop.
+  role         UserRole  @default(BARBER)
+  /// Active / selected barbershop. Null until onboarding creates a shop.
+  barbershopId String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
-  barber     Barber?
+  barbershop  Barbershop?            @relation(fields: [barbershopId], references: [id], onDelete: SetNull)
+  memberships BarbershopMembership[]
+  barber      Barber?
 
   @@index([barbershopId])
   @@map("users")
+}
+
+/// Multi-shop membership — a user can belong to many barbershops.
+model BarbershopMembership {
+  id           String   @id @default(cuid())
+  userId       String
+  barbershopId String
+  role         UserRole
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, barbershopId])
+  @@index([userId])
+  @@index([barbershopId])
+  @@map("barbershop_memberships")
 }
 
 model Barber {
@@ -99,12 +121,12 @@ model Barber {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user         User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
-  barbershop   Barbershop         @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
-  workingHours WorkingHour[]
-  services     BarberService[]
-  appointments Appointment[]
-  favoriteClients Client[] @relation("FavoriteBarber")
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  barbershop      Barbershop      @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  workingHours    WorkingHour[]
+  services        BarberService[]
+  appointments    Appointment[]
+  favoriteClients Client[]        @relation("FavoriteBarber")
 
   @@index([barbershopId])
   @@map("barbers")
@@ -143,17 +165,17 @@ model BarberService {
 }
 
 model Client {
-  id              String   @id @default(cuid())
-  barbershopId    String
-  name            String
-  phone           String
-  email           String?
-  notes           String?
+  id               String    @id @default(cuid())
+  barbershopId     String
+  name             String
+  phone            String
+  email            String?
+  notes            String?
   favoriteBarberId String?
-  visitCount      Int      @default(0)
-  lastVisitAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  visitCount       Int       @default(0)
+  lastVisitAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   barbershop     Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   favoriteBarber Barber?       @relation("FavoriteBarber", fields: [favoriteBarberId], references: [id], onDelete: SetNull)
@@ -195,7 +217,7 @@ model Appointment {
 }
 
 model BusinessHour {
-  id           String @id @default(cuid())
+  id           String  @id @default(cuid())
   barbershopId String
   dayOfWeek    Int
   openTime     String
@@ -307,26 +329,29 @@ enum ReceptionistSessionStatus {
 }
 
 model ReceptionistCallSession {
-  id             String                     @id @default(cuid())
-  callSid        String                     @unique
-  callerPhone    String
-  barbershopId   String?
-  intent         String?
-  clientName     String?
-  serviceName    String?
-  barberName     String?
-  preferredDate  String?
-  preferredTime  String?
-  awaitingField  String?
-  appointmentId  String?
-  status         ReceptionistSessionStatus  @default(ACTIVE)
-  turnCount      Int                        @default(0)
-  context        Json                       @default("{}")
-  createdAt      DateTime                   @default(now())
-  updatedAt      DateTime                   @updatedAt
-  expiresAt      DateTime
+  id            String                    @id @default(cuid())
+  callSid       String                    @unique
+  callerPhone   String
+  barbershopId  String?
+  intent        String?
+  clientName    String?
+  serviceName   String?
+  barberName    String?
+  preferredDate String?
+  preferredTime String?
+  awaitingField String?
+  appointmentId String?
+  status        ReceptionistSessionStatus @default(ACTIVE)
+  turnCount     Int                       @default(0)
+  context       Json                      @default("{}")
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  expiresAt     DateTime
+
+  barbershop Barbershop? @relation(fields: [barbershopId], references: [id], onDelete: SetNull)
 
   @@index([status, expiresAt])
   @@index([callerPhone])
+  @@index([barbershopId])
   @@map("receptionist_call_sessions")
 }

@@ -101,15 +101,16 @@ export async function POST(request: NextRequest) {
 }
 
 async function createBookingFromSession(data: SessionData, callSid: string): Promise<string> {
-  const shop = await prisma.barbershop.findFirst({
-    where: { twilioPhone: process.env.TWILIO_PHONE_NUMBER },
-  });
-
+  const { findBarbershopByTwilioTo, findDevFallbackBarbershop } = await import(
+    "@/lib/barbershop"
+  );
+  const toNumber = process.env.TWILIO_PHONE_NUMBER ?? "";
+  let shop = toNumber ? await findBarbershopByTwilioTo(toNumber) : null;
   if (!shop) {
-    const fallbackShop = await prisma.barbershop.findFirst();
-    if (!fallbackShop) return twimlSay("No shop configured. Goodbye.");
-
-    return await bookAppointment(fallbackShop.id, data);
+    shop = await findDevFallbackBarbershop(toNumber || "(legacy-handle)");
+  }
+  if (!shop) {
+    return twimlSay("Sorry, this number is not connected to a barbershop yet. Goodbye.");
   }
 
   return await bookAppointment(shop.id, data);
@@ -145,6 +146,15 @@ async function bookAppointment(barbershopId: string, data: SessionData): Promise
   if (!client) {
     client = await prisma.client.create({
       data: { barbershopId, name, phone },
+    });
+  } else if (data.name && client.name.trim().toLowerCase() !== name.trim().toLowerCase()) {
+    console.log(
+      "[twilio/voice/handle] phone matched existing client with different name",
+      { phone, existingName: client.name, callerProvidedName: name }
+    );
+    client = await prisma.client.update({
+      where: { id: client.id },
+      data: { name },
     });
   }
 

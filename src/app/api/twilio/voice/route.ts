@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/db";
 import {
   generateTwimlResponse,
   twimlSpeechGather,
@@ -10,6 +9,10 @@ import {
   getReceptionistGreeting,
   createCallSession,
 } from "@/lib/ai-receptionist";
+import {
+  resolveShopForTwilioTo,
+  UNCONNECTED_NUMBER_MESSAGE,
+} from "@/lib/ai-receptionist/shop-resolve";
 
 /**
  * Twilio Voice webhook — AI receptionist entry point.
@@ -26,7 +29,16 @@ export async function POST(request: NextRequest) {
 
     console.log("[twilio/voice] incoming call", { callSid, from, to });
 
-    await ensureReceptionistSession(callSid, from, to);
+    const { shop, unmatched } = await resolveShopForTwilioTo(to);
+    if (!shop) {
+      console.warn("[twilio/voice] rejecting unmatched To number", { to, unmatched });
+      return new NextResponse(
+        generateTwimlResponse(twimlSay(UNCONNECTED_NUMBER_MESSAGE)),
+        { headers: { "Content-Type": "text/xml" } }
+      );
+    }
+
+    await ensureReceptionistSession(callSid, from, shop.id);
 
     const greeting = getReceptionistGreeting();
     const twiml = generateTwimlResponse(
@@ -53,33 +65,23 @@ export async function GET(request: NextRequest) {
   return POST(request);
 }
 
-async function ensureReceptionistSession(callSid: string, from: string, to: string) {
+async function ensureReceptionistSession(
+  callSid: string,
+  from: string,
+  barbershopId: string
+) {
   try {
-    const shop = await resolveShop(to);
     const callerPhone = from ? normalizePhone(from) : "+10000000000";
     const session = await createCallSession(callSid, callerPhone, {
-      barbershopId: shop?.id,
+      barbershopId,
     });
     console.log("[twilio/voice] session ready", {
       callSid: session.callSid,
+      barbershopId,
       status: session.status,
       turnCount: session.turnCount,
     });
   } catch (error) {
     console.warn("[twilio/voice] session create skipped:", error);
-  }
-}
-
-async function resolveShop(toNumber: string) {
-  try {
-    if (toNumber) {
-      const byPhone = await prisma.barbershop.findFirst({
-        where: { twilioPhone: normalizePhone(toNumber) },
-      });
-      if (byPhone) return byPhone;
-    }
-    return await prisma.barbershop.findFirst({ orderBy: { createdAt: "asc" } });
-  } catch {
-    return null;
   }
 }
