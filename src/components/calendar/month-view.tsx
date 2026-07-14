@@ -2,7 +2,7 @@
 
 import { format, getMonthDates } from "@/lib/dates";
 import { formatShopLocalDateKey } from "@/lib/datetime";
-import { cn } from "@/lib/utils";
+import { cn, getAppointmentClientName } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CalendarAppointment } from "@/components/calendar/types";
 
@@ -90,7 +90,7 @@ export function MonthView({
                       onAppointmentClick(apt);
                     }}
                   >
-                    {apt.client.name}
+                    {getAppointmentClientName(apt)}
                   </div>
                 ))}
                 {dayAppointments.length > 3 && (

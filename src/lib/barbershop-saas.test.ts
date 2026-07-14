@@ -12,6 +12,7 @@ const prismaMock = vi.hoisted(() => ({
   barbershopMembership: {
     create: vi.fn(),
     upsert: vi.fn(),
+    findUnique: vi.fn(),
     findMany: vi.fn(),
   },
   user: {
@@ -226,11 +227,150 @@ describe("requireShopUser redirects users without a shop", () => {
       barber: null,
     });
     prismaMock.barbershopMembership.findMany.mockResolvedValue([]);
-    prismaMock.barbershopMembership.upsert.mockResolvedValue({});
+    prismaMock.barbershopMembership.findUnique.mockResolvedValue(null);
 
     const { requireShopUser } = await import("@/lib/auth");
 
     await expect(requireShopUser()).rejects.toThrow("REDIRECT:/onboarding");
+  });
+});
+
+describe("ensureMembershipForUser idempotency", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const user = {
+    id: "user_1",
+    role: UserRole.OWNER,
+    barbershopId: "shop_1",
+  };
+
+  const membership = {
+    id: "mem_1",
+    userId: "user_1",
+    barbershopId: "shop_1",
+    role: UserRole.OWNER,
+    createdAt: new Date(),
+  };
+
+  it("called twice does not throw and does not recreate", async () => {
+    prismaMock.barbershopMembership.findUnique.mockResolvedValue(membership);
+
+    const { ensureMembershipForUser } = await import("@/lib/barbershop");
+
+    const first = await ensureMembershipForUser(user);
+    const second = await ensureMembershipForUser(user);
+
+    expect(first).toEqual(membership);
+    expect(second).toEqual(membership);
+    expect(prismaMock.barbershopMembership.create).not.toHaveBeenCalled();
+  });
+
+  it("returns existing membership without create when already present", async () => {
+    prismaMock.barbershopMembership.findUnique.mockResolvedValue(membership);
+
+    const { ensureMembershipForUser } = await import("@/lib/barbershop");
+
+    const result = await ensureMembershipForUser(user);
+
+    expect(result).toEqual(membership);
+    expect(prismaMock.barbershopMembership.create).not.toHaveBeenCalled();
+  });
+
+  it("creates once when missing, then returns existing on second call", async () => {
+    prismaMock.barbershopMembership.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(membership);
+    prismaMock.barbershopMembership.create.mockResolvedValue(membership);
+
+    const { ensureMembershipForUser } = await import("@/lib/barbershop");
+
+    const created = await ensureMembershipForUser(user);
+    const again = await ensureMembershipForUser(user);
+
+    expect(created).toEqual(membership);
+    expect(again).toEqual(membership);
+    expect(prismaMock.barbershopMembership.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("handles P2002 race by fetching and returning existing", async () => {
+    const { Prisma } = await import("@prisma/client");
+    prismaMock.barbershopMembership.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(membership);
+    prismaMock.barbershopMembership.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+        code: "P2002",
+        clientVersion: "test",
+        meta: { target: ["userId", "barbershopId"] },
+      })
+    );
+
+    const { ensureMembershipForUser } = await import("@/lib/barbershop");
+
+    await expect(ensureMembershipForUser(user)).resolves.toEqual(membership);
+  });
+});
+
+describe("calendar auth path with existing membership", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.barbershopMembership.findUnique.mockReset();
+    prismaMock.barbershopMembership.create.mockReset();
+    prismaMock.barbershopMembership.findMany.mockReset();
+    prismaMock.user.findUnique.mockReset();
+  });
+
+  afterEach(() => {
+    vi.resetModules();
+    vi.doUnmock("@/lib/supabase/server");
+  });
+
+  it("getCurrentUser does not crash when membership already exists", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: vi.fn(async () => ({
+        auth: {
+          getUser: vi.fn(async () => ({
+            data: { user: { id: "user_1" } },
+          })),
+        },
+      })),
+    }));
+
+    const shop = {
+      id: "shop_1",
+      name: "Jeff's Cuts",
+      slug: "jeffs-cuts",
+      timezone: "America/Los_Angeles",
+    };
+    const membershipRow = {
+      id: "mem_1",
+      userId: "user_1",
+      barbershopId: "shop_1",
+      role: UserRole.OWNER,
+      barbershop: shop,
+      createdAt: new Date(),
+    };
+
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "user_1",
+      email: "jeff@example.com",
+      name: "Jeff",
+      role: UserRole.OWNER,
+      barbershopId: "shop_1",
+      barbershop: shop,
+      barber: { id: "barber_1" },
+    });
+    prismaMock.barbershopMembership.findUnique.mockResolvedValue(membershipRow);
+    prismaMock.barbershopMembership.findMany.mockResolvedValue([membershipRow]);
+
+    const { getCurrentUser } = await import("@/lib/auth");
+    const authUser = await getCurrentUser();
+
+    expect(authUser?.barbershopId).toBe("shop_1");
+    expect(authUser?.memberships).toHaveLength(1);
+    expect(prismaMock.barbershopMembership.create).not.toHaveBeenCalled();
   });
 });
 

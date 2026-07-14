@@ -130,16 +130,10 @@ describe("executeBooking caller name vs existing client", () => {
     prismaMock.notification.create.mockResolvedValue({});
   });
 
-  it("updates existing Dylan client to Jeff when caller says Jeff", async () => {
+  it("preserves Dylan client when same phone books as Jeff; stores Jeff snapshot", async () => {
     prismaMock.client.findUnique.mockResolvedValue({
       id: "client_dylan",
       name: "Dylan",
-      phone: "+15559876543",
-      barbershopId: "shop_1",
-    });
-    prismaMock.client.update.mockResolvedValue({
-      id: "client_dylan",
-      name: "Jeff",
       phone: "+15559876543",
       barbershopId: "shop_1",
     });
@@ -164,15 +158,14 @@ describe("executeBooking caller name vs existing client", () => {
     });
 
     expect(result.success).toBe(true);
-    expect(prismaMock.client.update).toHaveBeenCalledWith({
-      where: { id: "client_dylan" },
-      data: { name: "Jeff" },
-    });
+    expect(prismaMock.client.update).not.toHaveBeenCalled();
     expect(prismaMock.appointment.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           clientId: "client_dylan",
           barbershopId: "shop_1",
+          clientNameSnapshot: "Jeff",
+          clientPhoneSnapshot: "+15559876543",
         }),
       })
     );
@@ -221,5 +214,13 @@ describe("executeBooking caller name vs existing client", () => {
       },
     });
     expect(prismaMock.client.create.mock.calls[0][0].data.name).not.toBe("Dylan");
+    expect(prismaMock.appointment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          clientNameSnapshot: "Jeff",
+          clientPhoneSnapshot: "+15559876543",
+        }),
+      })
+    );
   });
 });

@@ -19,6 +19,7 @@ import {
 } from "@/lib/datetime";
 import { sanitizeInput } from "@/lib/rate-limit";
 import { serializeForClient } from "@/lib/serializers";
+import { getAppointmentClientName } from "@/lib/utils";
 import { UserRole } from "@prisma/client";
 
 export async function createAppointment(data: unknown) {
@@ -52,21 +53,25 @@ export async function createAppointment(data: unknown) {
     where: { barbershopId_phone: { barbershopId: user.barbershopId, phone: clientPhone } },
   });
 
+  const sanitizedName = sanitizeInput(clientName);
+  const sanitizedEmail = clientEmail ? sanitizeInput(clientEmail) : null;
+
   if (!client) {
     client = await prisma.client.create({
       data: {
         barbershopId: user.barbershopId,
-        name: sanitizeInput(clientName),
+        name: sanitizedName,
         phone: clientPhone,
-        email: clientEmail || null,
+        email: sanitizedEmail,
       },
     });
   } else {
-    await prisma.client.update({
+    // Shop-owner booking may update the Client profile for future use; history uses snapshots.
+    client = await prisma.client.update({
       where: { id: client.id },
       data: {
-        name: sanitizeInput(clientName),
-        email: clientEmail || client.email,
+        name: sanitizedName,
+        email: sanitizedEmail || client.email,
       },
     });
   }
@@ -82,6 +87,9 @@ export async function createAppointment(data: unknown) {
       duration: service.duration,
       notes: notes ? sanitizeInput(notes) : null,
       status: status ?? "PENDING",
+      clientNameSnapshot: sanitizedName,
+      clientPhoneSnapshot: clientPhone,
+      clientEmailSnapshot: sanitizedEmail,
     },
     include: {
       client: true,
@@ -94,7 +102,7 @@ export async function createAppointment(data: unknown) {
   const dateTime = `${formatShortDate(start, user.barbershop.timezone)} at ${formatTime(start, user.barbershop.timezone)}`;
   await sendSms(
     client.phone,
-    buildBookingConfirmationSms(client.name, service.name, barber.name, dateTime, appointment.barbershop.name),
+    buildBookingConfirmationSms(sanitizedName, service.name, barber.name, dateTime, appointment.barbershop.name),
     user.barbershopId,
     "booking_confirmation",
     appointment.id
@@ -104,7 +112,7 @@ export async function createAppointment(data: unknown) {
     data: {
       barbershopId: user.barbershopId,
       title: "New Appointment",
-      message: `${client.name} booked ${service.name} with ${barber.name}`,
+      message: `${sanitizedName} booked ${service.name} with ${barber.name}`,
       type: "APPOINTMENT",
       metadata: { appointmentId: appointment.id },
     },
@@ -158,8 +166,13 @@ export async function updateAppointment(id: string, data: unknown) {
   if (parsed.data.status === "CANCELLED") {
     const dateTime = `${formatShortDate(existing.startTime, user.barbershop.timezone)} at ${formatTime(existing.startTime, user.barbershop.timezone)}`;
     await sendSms(
-      existing.client.phone,
-      buildCancellationSms(existing.client.name, existing.service.name, dateTime, existing.barbershop.name),
+      existing.clientPhoneSnapshot ?? existing.client.phone,
+      buildCancellationSms(
+        getAppointmentClientName(existing),
+        existing.service.name,
+        dateTime,
+        existing.barbershop.name
+      ),
       user.barbershopId,
       "cancellation",
       id
@@ -167,8 +180,13 @@ export async function updateAppointment(id: string, data: unknown) {
   } else if (parsed.data.startTime) {
     const newDateTime = `${formatShortDate(appointment.startTime, user.barbershop.timezone)} at ${formatTime(appointment.startTime, user.barbershop.timezone)}`;
     await sendSms(
-      existing.client.phone,
-      buildRescheduleSms(existing.client.name, existing.service.name, newDateTime, existing.barbershop.name),
+      existing.clientPhoneSnapshot ?? existing.client.phone,
+      buildRescheduleSms(
+        getAppointmentClientName(existing),
+        existing.service.name,
+        newDateTime,
+        existing.barbershop.name
+      ),
       user.barbershopId,
       "reschedule",
       id

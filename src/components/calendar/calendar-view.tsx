@@ -18,6 +18,7 @@ import { MonthView } from "@/components/calendar/month-view";
 import { AppointmentDialog } from "@/components/calendar/appointment-dialog";
 import { getAppointments } from "@/actions/appointments";
 import { addDays, addWeeks, addMonths, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from "@/lib/dates";
+import { getAppointmentClientName } from "@/lib/utils";
 import type { CalendarAppointment, CalendarBarber, CalendarService } from "@/components/calendar/types";
 
 interface CalendarViewProps {
@@ -97,9 +98,12 @@ export function CalendarView({ barbers, services, timezone }: CalendarViewProps)
   const filteredAppointments = appointments.filter((apt) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
+    const displayName = getAppointmentClientName(apt).toLowerCase();
     return (
+      displayName.includes(q) ||
       apt.client.name.toLowerCase().includes(q) ||
       apt.client.phone.includes(q) ||
+      (apt.clientPhoneSnapshot?.includes(q) ?? false) ||
       apt.service.name.toLowerCase().includes(q)
     );
   });

@@ -201,6 +201,10 @@ model Appointment {
   depositStatus DepositStatus     @default(NONE)
   depositAmount Decimal?          @db.Decimal(10, 2)
   source        String            @default("manual")
+  /// Name given at booking time — prefer over client.name for display so history stays accurate.
+  clientNameSnapshot  String?
+  clientPhoneSnapshot String?
+  clientEmailSnapshot String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 

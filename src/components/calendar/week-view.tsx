@@ -7,7 +7,7 @@ import {
   getShopLocalDecimalHour,
   shopWallClockToUtc,
 } from "@/lib/datetime";
-import { cn } from "@/lib/utils";
+import { cn, getAppointmentClientName } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { updateAppointment } from "@/actions/appointments";
 import type { CalendarAppointment } from "@/components/calendar/types";
@@ -159,9 +159,9 @@ export function WeekView({
                     }}
                     role="button"
                     tabIndex={0}
-                    aria-label={`${apt.client.name}, ${apt.service.name}`}
+                    aria-label={`${getAppointmentClientName(apt)}, ${apt.service.name}`}
                   >
-                    <p className="font-medium truncate">{apt.client.name}</p>
+                    <p className="font-medium truncate">{getAppointmentClientName(apt)}</p>
                     <p className="text-muted-foreground truncate">
                       {formatTime(apt.startTime, timezone)}
                     </p>

@@ -7,7 +7,7 @@ import {
   getShopLocalDecimalHour,
   shopWallClockToUtc,
 } from "@/lib/datetime";
-import { cn } from "@/lib/utils";
+import { cn, getAppointmentClientName } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { updateAppointment } from "@/actions/appointments";
 import type { CalendarAppointment } from "@/components/calendar/types";
@@ -145,10 +145,10 @@ export function DayView({
                   }}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${apt.client.name}, ${apt.service.name} at ${formatTime(apt.startTime, timezone)}`}
+                  aria-label={`${getAppointmentClientName(apt)}, ${apt.service.name} at ${formatTime(apt.startTime, timezone)}`}
                   onKeyDown={(e) => e.key === "Enter" && onAppointmentClick(apt)}
                 >
-                  <p className="text-xs font-medium truncate">{apt.client.name}</p>
+                  <p className="text-xs font-medium truncate">{getAppointmentClientName(apt)}</p>
                   <p className="text-[10px] text-muted-foreground truncate">
                     {formatTime(apt.startTime, timezone)} · {apt.service.name}
                   </p>

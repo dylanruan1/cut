@@ -149,13 +149,9 @@ async function bookAppointment(barbershopId: string, data: SessionData): Promise
     });
   } else if (data.name && client.name.trim().toLowerCase() !== name.trim().toLowerCase()) {
     console.log(
-      "[twilio/voice/handle] phone matched existing client with different name",
+      "Caller provided different name than matched client; preserving existing client and storing appointment snapshot.",
       { phone, existingName: client.name, callerProvidedName: name }
     );
-    client = await prisma.client.update({
-      where: { id: client.id },
-      data: { name },
-    });
   }
 
   const appointment = await prisma.appointment.create({
@@ -169,6 +165,8 @@ async function bookAppointment(barbershopId: string, data: SessionData): Promise
       duration: service.duration,
       status: "PENDING",
       source: "phone",
+      clientNameSnapshot: name,
+      clientPhoneSnapshot: phone,
     },
     include: { barbershop: true },
   });

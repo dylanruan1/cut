@@ -184,8 +184,9 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
     parsed.clientName?.trim() &&
     client.name.trim().toLowerCase() !== clientName.toLowerCase()
   ) {
+    // Do not rename the Client profile — keep history stable; snapshot holds this call's name.
     console.log(
-      "[ai-receptionist/booking] phone matched existing client with different name",
+      "Caller provided different name than matched client; preserving existing client and storing appointment snapshot.",
       {
         clientId: client.id,
         phone: callerPhone,
@@ -193,11 +194,6 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
         callerProvidedName: clientName,
       }
     );
-    // Update only after booking confirmation (this path runs post-confirm).
-    client = await prisma.client.update({
-      where: { id: client.id },
-      data: { name: clientName },
-    });
   }
 
   const appointment = await prisma.appointment.create({
@@ -211,6 +207,8 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
       duration: service.duration,
       status: "CONFIRMED",
       source: "ai_receptionist",
+      clientNameSnapshot: clientName,
+      clientPhoneSnapshot: callerPhone,
     },
   });
 
@@ -218,7 +216,7 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
     data: {
       barbershopId: shop.id,
       title: "Phone booking",
-      message: `${client.name} booked ${service.name} with ${slot.barberName} via AI receptionist`,
+      message: `${clientName} booked ${service.name} with ${slot.barberName} via AI receptionist`,
       type: "APPOINTMENT",
       metadata: { appointmentId: appointment.id, source: "ai_receptionist" },
     },
@@ -244,7 +242,7 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
     to: callerPhone,
     barbershopId: shop.id,
     appointmentId: appointment.id,
-    body: `Hi ${client.name}! Your ${service.name} with ${slot.barberName} at ${shop.name} is confirmed for ${spokenWhen}. Reply STOP to opt out.`,
+    body: `Hi ${clientName}! Your ${service.name} with ${slot.barberName} at ${shop.name} is confirmed for ${spokenWhen}. Reply STOP to opt out.`,
   });
 
   return {

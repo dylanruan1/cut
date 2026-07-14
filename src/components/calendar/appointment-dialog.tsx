@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { createAppointment, updateAppointment, deleteAppointment } from "@/actions/appointments";
 import { formatDateTimeLocalInTimezone } from "@/lib/datetime";
+import { getAppointmentClientName } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { Trash2 } from "lucide-react";
 
@@ -34,6 +35,9 @@ interface AppointmentDialogProps {
     notes: string | null;
     barberId: string;
     serviceId: string;
+    clientNameSnapshot?: string | null;
+    clientPhoneSnapshot?: string | null;
+    clientEmailSnapshot?: string | null;
     client: { name: string; phone: string; email: string | null };
   } | null;
   defaultDate?: Date;
@@ -132,7 +136,7 @@ export function AppointmentDialog({
               <Input
                 id="clientName"
                 name="clientName"
-                defaultValue={appointment?.client.name}
+                defaultValue={appointment ? getAppointmentClientName(appointment) : undefined}
                 required
               />
             </div>
@@ -142,7 +146,7 @@ export function AppointmentDialog({
                 id="clientPhone"
                 name="clientPhone"
                 type="tel"
-                defaultValue={appointment?.client.phone}
+                defaultValue={appointment?.clientPhoneSnapshot ?? appointment?.client.phone}
                 required
               />
             </div>
@@ -153,7 +157,7 @@ export function AppointmentDialog({
               id="clientEmail"
               name="clientEmail"
               type="email"
-              defaultValue={appointment?.client.email ?? ""}
+              defaultValue={appointment?.clientEmailSnapshot ?? appointment?.client.email ?? ""}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">

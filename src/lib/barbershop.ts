@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { UserRole, type Barbershop, type Prisma } from "@prisma/client";
+import { Prisma, UserRole, type Barbershop } from "@prisma/client";
 import prisma from "@/lib/db";
 import { DEFAULT_SERVICES } from "@/lib/dates";
 import { generateSlug } from "@/lib/utils";
@@ -200,28 +200,46 @@ export async function createBarbershopWithOwner(
   return barbershop;
 }
 
-/** Ensure a membership row exists for legacy users that only have User.barbershopId. */
+/**
+ * Ensure a membership row exists for legacy users that only have User.barbershopId.
+ * Fully idempotent: concurrent calls for the same userId+barbershopId never crash.
+ */
 export async function ensureMembershipForUser(user: {
   id: string;
   role: UserRole;
   barbershopId: string | null;
-}): Promise<void> {
-  if (!user.barbershopId) return;
+}) {
+  if (!user.barbershopId) return null;
 
-  await prisma.barbershopMembership.upsert({
-    where: {
-      userId_barbershopId: {
-        userId: user.id,
-        barbershopId: user.barbershopId,
-      },
-    },
-    create: {
+  const where = {
+    userId_barbershopId: {
       userId: user.id,
       barbershopId: user.barbershopId,
-      role: user.role,
     },
-    update: {},
-  });
+  } as const;
+
+  const existing = await prisma.barbershopMembership.findUnique({ where });
+  if (existing) return existing;
+
+  try {
+    return await prisma.barbershopMembership.create({
+      data: {
+        userId: user.id,
+        barbershopId: user.barbershopId,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    // Race: another request created the row between findUnique and create.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      const raced = await prisma.barbershopMembership.findUnique({ where });
+      if (raced) return raced;
+    }
+    throw error;
+  }
 }
 
 export async function listMembershipsForUser(
