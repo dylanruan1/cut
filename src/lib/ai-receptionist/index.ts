@@ -20,19 +20,33 @@ import {
   GREETING,
   UNKNOWN_PROMPT,
   LOOP_RECOVERY_PROMPT,
+  FOLLOW_UP_PROMPTS,
   intentAcknowledgement,
+  describeBookingForVoice,
 } from "./prompts";
 import type {
   AwaitingField,
-  BookingField,
   ProcessReceptionistInput,
   ReceptionistProvider,
   ReceptionistResponse,
 } from "./types";
 import { MAX_PROMPT_REPEATS, MAX_TURN_COUNT } from "./types";
+import {
+  askMeridiemSpeech,
+  neitherMeridiemSpeech,
+  resolveAmbiguousTime,
+} from "./time-disambiguation";
 
 export type { ProcessReceptionistInput, ReceptionistResponse, ReceptionistProvider };
-export { GREETING, UNKNOWN_PROMPT, buildSystemPrompt, LOOP_RECOVERY_PROMPT } from "./prompts";
+export {
+  GREETING,
+  UNKNOWN_PROMPT,
+  buildSystemPrompt,
+  LOOP_RECOVERY_PROMPT,
+  describeBookingForVoice,
+  getReceptionistGreeting,
+  isReceptionistGreeting,
+} from "./prompts";
 export {
   parseReceptionistMessage,
   nextFollowUpQuestion,
@@ -41,12 +55,22 @@ export {
   getMissingFields,
   extractPreferredDate,
   extractPreferredTime,
+  extractTimePreference,
+  extractMeridiemAnswer,
 } from "./parser";
 export { findAvailability, isSlotAvailable, combineDateAndTime } from "./availability";
+export {
+  resolveAmbiguousTime,
+  askMeridiemSpeech,
+  neitherMeridiemSpeech,
+  DEFAULT_BUSINESS_OPEN,
+  DEFAULT_BUSINESS_CLOSE,
+} from "./time-disambiguation";
 export {
   executeBooking,
   cancelUpcomingAppointment,
   checkBookingAvailability,
+  findExistingClientName,
 } from "./booking";
 export { sendReceptionistSms } from "./sms";
 export {
@@ -203,6 +227,17 @@ async function handleBookingFlow(
     Boolean(parsed.anyBarber) ||
     input.session?.awaitingField === "barberName";
 
+  // Bare 1-12 hour requests must be clarified before collecting or confirming anything else.
+  const disambiguated = applyTimeDisambiguation(input, parsed);
+  if (disambiguated.earlyReturn) {
+    return disambiguated.earlyReturn;
+  }
+  parsed = disambiguated.parsed;
+
+  // parsed.clientName only ever holds what the caller said on THIS call.
+  // Old names (matched Client records, previous sessions, appointment
+  // snapshots) are never suggested or spoken — when the name is missing we
+  // always ask "What name should I put the appointment under?".
   const missingFields = getMissingFields(parsed.intent, {
     clientName: parsed.clientName,
     serviceName: parsed.serviceName,
@@ -214,7 +249,13 @@ async function handleBookingFlow(
     barberAsked,
   });
 
-  const enriched = { ...parsed, missingFields };
+  const enriched = {
+    ...parsed,
+    // A name in parsed.clientName can only come from the caller's own words
+    // on this call — sessions and phone matches never auto-fill it.
+    confirmedClientName: Boolean(parsed.clientName?.trim()),
+    missingFields,
+  };
 
   // User declined confirmation — clear only confirmation, keep details.
   if (
@@ -230,15 +271,53 @@ async function handleBookingFlow(
     };
   }
 
-  if (enriched.missingFields.length > 0) {
-    const awaitingField = nextAwaitingField(enriched);
-    const followUp = nextFollowUpQuestion(enriched) ?? UNKNOWN_PROMPT;
+  // Still waiting on AM/PM after a failed short answer.
+  if (
+    input.session?.awaitingField === "timeMeridiem" &&
+    !enriched.preferredTime &&
+    enriched.ambiguousTime
+  ) {
+    const resolution = resolveAmbiguousTime(
+      enriched.ambiguousTime,
+      input.shop,
+      enriched.preferredDate
+    );
+    if (resolution.status === "ask") {
+      return {
+        speak: askMeridiemSpeech(resolution.spokenAm, resolution.spokenPm),
+        intent: enriched.intent,
+        parsed: {
+          ...enriched,
+          preferredTime: undefined,
+          missingFields: [
+            "preferredTime",
+            ...enriched.missingFields.filter((f) => f !== "preferredTime"),
+          ],
+        },
+        shouldContinue: true,
+        awaitingField: "timeMeridiem",
+      };
+    }
+  }
+
+  // Collect booking details first; confirmation is handled after availability.
+  const collectionMissing = enriched.missingFields.filter(
+    (f) => f !== "confirmation"
+  );
+
+  if (collectionMissing.length > 0) {
+    const awaitingField = collectionMissing[0] ?? nextAwaitingField(enriched);
+    const followUp =
+      nextFollowUpQuestion({ ...enriched, missingFields: collectionMissing }) ??
+      UNKNOWN_PROMPT;
 
     const priorAwaiting = input.session?.awaitingField;
     const failedSameField =
       priorAwaiting != null &&
       priorAwaiting === awaitingField &&
-      enriched.missingFields.includes(priorAwaiting);
+      collectionMissing.includes(
+        priorAwaiting as (typeof collectionMissing)[number]
+      );
 
     const promptRepeatCount = failedSameField
       ? (input.promptRepeatCount ?? 0) + 1
@@ -265,6 +344,36 @@ async function handleBookingFlow(
       parsed: enriched,
       shouldContinue: true,
       awaitingField,
+    };
+  }
+
+  // Defensive gate: from here on we either book or build the confirmation
+  // sentence. Neither may ever happen with a blank name — if enforcement
+  // above was somehow bypassed, ask for the name instead of confirming.
+  if (!enriched.clientName?.trim()) {
+    console.log("[ai-receptionist] confirmation blocked — missing client name", {
+      awaitingFieldBefore: input.session?.awaitingField ?? null,
+      sessionClientName: input.session?.clientName ?? null,
+      parsedClientName: parsed.clientName ?? null,
+      confirmationBlockedForMissingName: true,
+    });
+    return {
+      speak: FOLLOW_UP_PROMPTS.clientName,
+      intent: enriched.intent,
+      parsed: {
+        ...enriched,
+        clientName: undefined,
+        confirmedClientName: false,
+        // Any earlier "yes" was for a nameless summary — re-confirm after
+        // the caller gives the name.
+        confirmed: undefined,
+        missingFields: [
+          "clientName",
+          ...enriched.missingFields.filter((f) => f !== "clientName"),
+        ],
+      },
+      shouldContinue: true,
+      awaitingField: "clientName",
     };
   }
 
@@ -302,6 +411,7 @@ async function handleBookingFlow(
       parsed: {
         ...enriched,
         preferredTime: undefined,
+        ambiguousTime: undefined,
         missingFields: ["preferredTime"],
       },
       shouldContinue: true,
@@ -312,7 +422,6 @@ async function handleBookingFlow(
 
   const slot = availability.options[0];
   const timezone = resolveShopTimezone(input.shop.timezone);
-  const who = enriched.anyBarber || !enriched.barberName ? slot.barberName : enriched.barberName;
   const confirmStart =
     enriched.preferredDate && enriched.preferredTime
       ? parseReceptionistDateTime(
@@ -322,11 +431,35 @@ async function handleBookingFlow(
         )
       : new Date(slot.startTime);
   const spokenWhen = formatAppointmentWhenForVoice(confirmStart, timezone);
-  const confirmPrompt = `I have ${enriched.serviceName} with ${who} on ${spokenWhen}. Should I go ahead and book that? Please say yes or no.`;
+  // The caller is always "under the name X" (current session name — never a
+  // matched Client profile name or dashboard user name). "with barber Y" is
+  // spoken only when the caller explicitly asked for that barber; with no
+  // preference the barber is omitted so it can't be confused with the client.
+  const confirmName = enriched.clientName?.trim();
+  const preferredBarberName = enriched.anyBarber
+    ? undefined
+    : enriched.barberName?.trim();
+  const confirmPrompt = `Just to confirm, I have ${describeBookingForVoice({
+    serviceName: enriched.serviceName,
+    clientName: confirmName,
+    barberName: preferredBarberName,
+    shopName: input.shop.name,
+  })} for ${spokenWhen}. Should I book that? Please say yes or no.`;
+
+  console.log("[ai-receptionist] pre-confirm name", {
+    sessionClientName: enriched.clientName ?? null,
+    voiceConfirmationName: confirmName ?? null,
+    confirmedClientName: enriched.confirmedClientName,
+  });
 
   console.log("[ai-receptionist] pre-confirm timing", {
+    rawSpeechResult: enriched.rawText,
     callerRequestedDate: enriched.preferredDate,
     callerRequestedTime: enriched.preferredTime,
+    preferredTimeRaw: enriched.preferredTimeRaw,
+    hasExplicitMeridiem: enriched.hasExplicitMeridiem,
+    isAmbiguousHour: enriched.isAmbiguousHour,
+    resolvedFinalTime: enriched.preferredTime,
     preferredTimeSpoken: enriched.preferredTime
       ? formatPreferredTimeForVoice(enriched.preferredTime)
       : null,
@@ -338,17 +471,105 @@ async function handleBookingFlow(
   return {
     speak: confirmPrompt,
     intent: enriched.intent,
-    parsed: { ...enriched, missingFields: ["confirmation"] },
+    parsed: {
+      ...enriched,
+      ambiguousTime: undefined,
+      missingFields: ["confirmation"],
+    },
     shouldContinue: true,
     awaitingField: "confirmation",
     availabilityOptions: availability.options,
   };
 }
 
+function applyTimeDisambiguation(
+  input: ProcessReceptionistInput,
+  parsed: ReturnType<typeof parseReceptionistMessage>
+): {
+  parsed: ReturnType<typeof parseReceptionistMessage>;
+  earlyReturn?: ReceptionistResponse;
+} {
+  if (parsed.preferredTime || !parsed.ambiguousTime) {
+    return { parsed };
+  }
+
+  const resolution = resolveAmbiguousTime(
+    parsed.ambiguousTime,
+    input.shop,
+    parsed.preferredDate
+  );
+
+  if (resolution.status === "resolved") {
+    return {
+      parsed: {
+        ...parsed,
+        preferredTime: resolution.time,
+        ambiguousTime: undefined,
+        missingFields: parsed.missingFields.filter((f) => f !== "preferredTime"),
+      },
+    };
+  }
+
+  if (resolution.status === "ask") {
+    return {
+      parsed: {
+        ...parsed,
+        preferredTime: undefined,
+        missingFields: [
+          "preferredTime",
+          ...parsed.missingFields.filter((f) => f !== "preferredTime"),
+        ],
+      },
+      earlyReturn: {
+        speak: askMeridiemSpeech(resolution.spokenAm, resolution.spokenPm),
+        intent: parsed.intent,
+        parsed: {
+          ...parsed,
+          preferredTime: undefined,
+          missingFields: [
+            "preferredTime",
+            ...parsed.missingFields.filter((f) => f !== "preferredTime"),
+          ],
+        },
+        shouldContinue: true,
+        awaitingField: "timeMeridiem",
+      },
+    };
+  }
+
+  return {
+    parsed: {
+      ...parsed,
+      preferredTime: undefined,
+      ambiguousTime: undefined,
+      missingFields: [
+        "preferredTime",
+        ...parsed.missingFields.filter((f) => f !== "preferredTime"),
+      ],
+    },
+    earlyReturn: {
+      speak: neitherMeridiemSpeech(resolution.spokenAm, resolution.spokenPm),
+      intent: parsed.intent,
+      parsed: {
+        ...parsed,
+        preferredTime: undefined,
+        ambiguousTime: undefined,
+        missingFields: [
+          "preferredTime",
+          ...parsed.missingFields.filter((f) => f !== "preferredTime"),
+        ],
+      },
+      shouldContinue: true,
+      awaitingField: "preferredTime",
+    },
+  };
+}
+
 function clearField(
   parsed: ReturnType<typeof parseReceptionistMessage>,
-  field: BookingField
+  field: AwaitingField
 ): ReturnType<typeof parseReceptionistMessage> {
+  if (!field) return parsed;
   const next = { ...parsed };
   switch (field) {
     case "clientName":
@@ -361,7 +582,9 @@ function clearField(
       next.preferredDate = undefined;
       break;
     case "preferredTime":
+    case "timeMeridiem":
       next.preferredTime = undefined;
+      next.ambiguousTime = undefined;
       break;
     case "barberName":
       next.barberName = undefined;
@@ -371,7 +594,14 @@ function clearField(
       next.confirmed = undefined;
       break;
   }
-  next.missingFields = [field, ...parsed.missingFields.filter((f) => f !== field)];
+  if (field === "timeMeridiem") {
+    next.missingFields = [
+      "preferredTime",
+      ...parsed.missingFields.filter((f) => f !== "preferredTime"),
+    ];
+  } else {
+    next.missingFields = [field, ...parsed.missingFields.filter((f) => f !== field)];
+  }
   return next;
 }
 
@@ -426,8 +656,4 @@ function toSpeechTime(hhmm: string): string {
   return m === 0
     ? `${hour12} ${period}`
     : `${hour12}:${String(m).padStart(2, "0")} ${period}`;
-}
-
-export function getReceptionistGreeting(): string {
-  return GREETING;
 }

@@ -42,6 +42,19 @@ enum NotificationType {
   INVITE
 }
 
+enum PhoneSetupMethod {
+  NEW_TWILIO
+  FORWARD_EXISTING
+  PORT_TO_TWILIO
+}
+
+enum PhoneSetupStatus {
+  NOT_STARTED
+  PENDING
+  CONNECTED
+  ERROR
+}
+
 model Barbershop {
   id          String   @id @default(cuid())
   name        String
@@ -51,7 +64,11 @@ model Barbershop {
   phone       String?
   instagram   String?
   timezone    String   @default("America/Los_Angeles")
+  /// Twilio number that receives inbound AI receptionist calls (E.164). Matched to Twilio "To".
   twilioPhone String?  @unique
+  phoneSetupMethod PhoneSetupMethod?
+  phoneSetupStatus PhoneSetupStatus @default(NOT_STARTED)
+  phonePortingNotes String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -338,7 +355,12 @@ model ReceptionistCallSession {
   callerPhone   String
   barbershopId  String?
   intent        String?
+  /// Name the CALLER gave (or explicitly confirmed) on THIS call. Never auto-filled from a matched Client.
   clientName    String?
+  /// Phone-matched Client name offered to the caller ("Is this appointment under the name X?"). Suggestion only.
+  suggestedClientName String?
+  /// True once the caller has spoken a name or said yes to the suggested name on this call.
+  confirmedClientName Boolean               @default(false)
   serviceName   String?
   barberName    String?
   preferredDate String?

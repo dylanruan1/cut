@@ -11,6 +11,7 @@ import {
   findAvailability,
   type ExistingAppointment,
 } from "./availability";
+import { describeBookingForVoice } from "./prompts";
 import { sendReceptionistSms } from "./sms";
 import type {
   BookingResult,
@@ -46,6 +47,38 @@ function normalizeBarberMatch(
     barbers.find((b) => b.name.toLowerCase() === needle) ??
     barbers.find((b) => b.name.toLowerCase().startsWith(needle))
   );
+}
+
+/**
+ * Best-effort lookup of an existing Client profile name for a caller phone.
+ * LOG-ONLY for the voice flow: the matched name is never spoken, suggested,
+ * or used to fill the session name — the receptionist always asks the
+ * caller for a name. Never throws — lookup failure means "no known client".
+ */
+export async function findExistingClientName(
+  shopId: string,
+  callerPhone: string
+): Promise<string | null> {
+  if (!callerPhone) return null;
+  try {
+    const client = await prisma.client.findUnique({
+      where: {
+        barbershopId_phone: {
+          barbershopId: shopId,
+          phone: callerPhone,
+        },
+      },
+      select: { name: true },
+    });
+    return client?.name?.trim() || null;
+  } catch (error) {
+    console.warn("[ai-receptionist/booking] existing client lookup failed", {
+      shopId,
+      callerPhone,
+      error: error instanceof Error ? error.message : error,
+    });
+    return null;
+  }
 }
 
 export type AvailabilityCheckResult = {
@@ -160,8 +193,6 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
       ? combineDateAndTime(parsed.preferredDate, parsed.preferredTime, timezone)
       : new Date(slot.startTime);
   const endTime = addMinutes(startTime, service.duration);
-  // Always prefer the name spoken on this call — never dashboard/auth user name.
-  const clientName = parsed.clientName?.trim() || "Phone Customer";
 
   let client = await prisma.client.findUnique({
     where: {
@@ -170,6 +201,22 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
         phone: callerPhone,
       },
     },
+  });
+
+  // Source of truth is the name spoken/confirmed on this call
+  // (session.clientName → parsed.clientName). The conversation flow won't
+  // reach booking without a confirmed name; the existing-client /
+  // "Phone Customer" fallback below is a booking-time-only safety net and
+  // never drives conversation prompts. Never a dashboard/auth user name.
+  const callerProvidedName = parsed.clientName?.trim() || null;
+  const clientName =
+    callerProvidedName || client?.name?.trim() || "Phone Customer";
+
+  console.log("[ai-receptionist/booking] client name resolution", {
+    phone: callerPhone,
+    existingMatchedClientName: client?.name ?? null,
+    callerProvidedName,
+    finalClientName: clientName,
   });
 
   if (!client) {
@@ -181,12 +228,12 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
       },
     });
   } else if (
-    parsed.clientName?.trim() &&
+    callerProvidedName &&
     client.name.trim().toLowerCase() !== clientName.toLowerCase()
   ) {
     // Do not rename the Client profile — keep history stable; snapshot holds this call's name.
     console.log(
-      "Caller provided different name than matched client; preserving existing client and storing appointment snapshot.",
+      "[ai-receptionist/booking] caller name mismatch — preserving existing client, snapshot keeps caller name",
       {
         clientId: client.id,
         phone: callerPhone,
@@ -224,12 +271,33 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
 
   const spokenWhen = formatAppointmentWhenForVoice(appointment.startTime, timezone);
   const spokenTime = formatAppointmentTimeForVoice(appointment.startTime, timezone);
-  const speak = `You're all set. You're booked for ${spokenWhen}. I booked ${service.name} with ${slot.barberName}. You'll get a text confirmation shortly.`;
+  // Speak "with barber X" only when the caller explicitly asked for that
+  // barber; otherwise omit the assigned barber so it can't be mistaken for
+  // the client. The client is always "under the name X".
+  const spokenBarberName =
+    !parsed.anyBarber && parsed.barberName ? slot.barberName : undefined;
+  const speak = `You're booked at ${shop.name}. The appointment is ${describeBookingForVoice({
+    serviceName: service.name,
+    clientName,
+    barberName: spokenBarberName,
+    shopName: shop.name,
+  })} for ${spokenWhen}. You'll get a text confirmation shortly.`;
+
+  console.log("[ai-receptionist/booking] booked voice name", {
+    voiceConfirmationName: clientName,
+    appointmentSnapshotName: appointment.clientNameSnapshot ?? clientName,
+    existingClientProfileName: client.name,
+    appointmentId: appointment.id,
+  });
 
   console.log("[ai-receptionist/booking] confirmation timing", {
     rawSpeechResult: parsed.rawText,
     parsedPreferredDate: parsed.preferredDate,
     parsedPreferredTime: parsed.preferredTime,
+    preferredTimeRaw: parsed.preferredTimeRaw,
+    hasExplicitMeridiem: parsed.hasExplicitMeridiem,
+    isAmbiguousHour: parsed.isAmbiguousHour,
+    resolvedFinalTime: parsed.preferredTime,
     timezoneUsed: timezone,
     finalAppointmentStartISO: appointment.startTime.toISOString(),
     finalAppointmentStartFormatted: spokenWhen,
@@ -242,7 +310,7 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
     to: callerPhone,
     barbershopId: shop.id,
     appointmentId: appointment.id,
-    body: `Hi ${clientName}! Your ${service.name} with ${slot.barberName} at ${shop.name} is confirmed for ${spokenWhen}. Reply STOP to opt out.`,
+    body: `Hi ${clientName}! Your ${service.name} with barber ${slot.barberName} at ${shop.name} is confirmed for ${spokenWhen}. Reply STOP to opt out.`,
   });
 
   return {
@@ -301,14 +369,14 @@ export async function cancelUpcomingAppointment(input: {
     to: input.callerPhone,
     barbershopId: input.shopId,
     appointmentId: appointment.id,
-    body: `Your ${appointment.service.name} with ${appointment.barber.name} has been cancelled. Call us anytime to rebook.`,
+    body: `Your ${appointment.service.name} with barber ${appointment.barber.name} has been cancelled. Call us anytime to rebook.`,
     type: "cancellation",
   });
 
   return {
     success: true,
     appointmentId: appointment.id,
-    message: `I've cancelled your ${appointment.service.name} with ${appointment.barber.name}. Is there anything else I can help with?`,
+    message: `I've cancelled your ${appointment.service.name} with barber ${appointment.barber.name}. Is there anything else I can help with?`,
   };
 }
 

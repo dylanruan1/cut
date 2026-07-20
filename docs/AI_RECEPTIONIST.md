@@ -65,12 +65,14 @@ Check configuration in code via `isTwilioConfigured()` / `getTwilioConfigStatus(
 
 ## Configure Twilio webhook
 
+See **[PHONE_SETUP.md](./PHONE_SETUP.md)** for new numbers, forwarding, porting (instructions only), and production vs ngrok.
+
 1. Buy or select a Twilio number.
 2. In Twilio Console → Phone Numbers → Voice & Fax:
    - **A call comes in**: Webhook
    - URL: `https://YOUR_DOMAIN/api/twilio/voice`
    - Method: `HTTP POST`
-3. Optionally set the shop's `twilioPhone` in the database so inbound calls resolve to the correct barbershop.
+3. Set the shop's `twilioPhone` in Settings → AI Phone so inbound **To** resolves to the correct barbershop.
 4. For local testing, expose your app with a tunnel (ngrok, Cloudflare Tunnel) and point the webhook at that URL.
 
 Legacy keypad flow remains at `/api/twilio/voice/handle` if you still need DTMF menus.

@@ -301,6 +301,15 @@ export async function updateShopSettings(data: unknown) {
     ? normalizePhone(parsed.data.twilioPhone)
     : null;
 
+  let phoneSetupStatus = parsed.data.phoneSetupStatus;
+  if (!phoneSetupStatus) {
+    phoneSetupStatus = twilioPhone ? "CONNECTED" : "NOT_STARTED";
+  } else if (twilioPhone && phoneSetupStatus === "NOT_STARTED") {
+    phoneSetupStatus = "CONNECTED";
+  } else if (!twilioPhone && phoneSetupStatus === "CONNECTED") {
+    phoneSetupStatus = "NOT_STARTED";
+  }
+
   const shop = await prisma.barbershop.update({
     where: { id: user.barbershopId },
     data: {
@@ -310,6 +319,9 @@ export async function updateShopSettings(data: unknown) {
       instagram: parsed.data.instagram || null,
       timezone: parsed.data.timezone,
       twilioPhone,
+      phoneSetupMethod: parsed.data.phoneSetupMethod ?? null,
+      phoneSetupStatus,
+      phonePortingNotes: parsed.data.phonePortingNotes?.trim() || null,
     },
   });
 

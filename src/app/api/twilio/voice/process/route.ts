@@ -15,13 +15,14 @@ import {
   getSessionContext,
   summarizeSession,
   isContinuableSession,
-  GREETING,
+  findExistingClientName,
   type CallSessionContext,
 } from "@/lib/ai-receptionist";
 import {
   resolveShopForTwilioTo,
   UNCONNECTED_NUMBER_MESSAGE,
 } from "@/lib/ai-receptionist/shop-resolve";
+import { isReceptionistGreeting } from "@/lib/ai-receptionist/prompts";
 
 function appBaseUrl(request: NextRequest): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     const to = (formData.get("To") as string) || "";
     const actionUrl = processActionUrl(request);
 
-    log("request", { callSid, from, to, speechResult });
+    log("request", { callSid, from, to, speechResult, rawSpeechResult: speechResult });
 
     if (!callSid) {
       return twimlXml(
@@ -67,13 +68,23 @@ export async function POST(request: NextRequest) {
 
     const callerPhone = from ? normalizePhone(from) : "+10000000000";
 
-    // Always load-or-create. createCallSession preserves ACTIVE / AWAITING_CONFIRMATION.
+    // Always load-or-create. createCallSession preserves ACTIVE /
+    // AWAITING_CONFIRMATION and resets completed/expired sessions to a
+    // clean slate, so nothing from an old call can leak into this one.
     let session = await getCallSession(callSid);
-    if (!session || !isContinuableSession(session)) {
+    const sessionReused = Boolean(session && isContinuableSession(session));
+    if (!session || !sessionReused) {
       session = await createCallSession(callSid, callerPhone, {
         barbershopId: shop.id,
       });
     }
+
+    log("session_load", {
+      callSid,
+      from,
+      sessionReused,
+      status: session.status,
+    });
 
     log("session_before_merge", summarizeSession(session));
 
@@ -89,6 +100,19 @@ export async function POST(request: NextRequest) {
     const priorState = sessionToParsedState(session);
     const turnCount = (session.turnCount ?? context.turnCount ?? 0) + 1;
 
+    // Log-only lookup: a Client matched by phone is NEVER spoken, suggested,
+    // or used to fill session.clientName. The receptionist always asks
+    // "What name should I put the appointment under?" and only the caller's
+    // answer becomes the name. The matched record is used internally at
+    // booking time to link the appointment (without renaming the client).
+    let matchedClientName: string | null = null;
+    if (!session.clientName?.trim()) {
+      matchedClientName = await findExistingClientName(
+        shop.id,
+        session.callerPhone || callerPhone
+      );
+    }
+
     const response = await processReceptionistMessage({
       text: speechResult,
       callerPhone: session.callerPhone || callerPhone,
@@ -99,8 +123,39 @@ export async function POST(request: NextRequest) {
       lastPrompt: context.lastPrompt,
     });
 
+    log("client_name_state", {
+      callSid,
+      from,
+      sessionReused,
+      awaitingFieldBefore: priorState.awaitingField ?? null,
+      awaitingFieldAfter: response.awaitingField ?? null,
+      existingMatchedClientName: matchedClientName ?? null,
+      matchedNameIgnoredForVoice: Boolean(matchedClientName),
+      sessionClientNameBefore: session.clientName ?? null,
+      confirmedClientNameBefore: session.confirmedClientName,
+      parsedClientName: response.parsed.clientName ?? null,
+      confirmedClientNameAfter: response.parsed.confirmedClientName ?? false,
+      confirmationBlockedForMissingName:
+        priorState.awaitingField === "confirmation" &&
+        response.awaitingField === "clientName",
+    });
+
+    log("time_parse", {
+      rawSpeechResult: speechResult,
+      normalizedTranscript: speechResult.toLowerCase().trim(),
+      parsedServiceName: response.parsed.serviceName ?? null,
+      parsedPreferredDate: response.parsed.preferredDate ?? null,
+      parsedPreferredTime:
+        response.parsed.preferredTime ?? response.parsed.preferredTimeRaw ?? null,
+      preferredTimeRaw: response.parsed.preferredTimeRaw ?? null,
+      hasExplicitMeridiem: response.parsed.hasExplicitMeridiem ?? null,
+      isAmbiguousHour: response.parsed.isAmbiguousHour ?? false,
+      awaitingField: response.awaitingField ?? null,
+      resolvedFinalTime: response.parsed.preferredTime ?? null,
+    });
+
     // Never speak the full intro mid-call.
-    if (response.speak.trim() === GREETING.trim() && turnCount > 1) {
+    if (isReceptionistGreeting(response.speak) && turnCount > 1) {
       response.speak = "What was that? I can help you finish booking.";
     }
 
@@ -115,7 +170,9 @@ export async function POST(request: NextRequest) {
     const promptRepeatCount =
       priorAwaiting &&
       priorAwaiting === response.awaitingField &&
-      response.parsed.missingFields.includes(priorAwaiting)
+      (priorAwaiting === "timeMeridiem"
+        ? !response.parsed.preferredTime
+        : response.parsed.missingFields.includes(priorAwaiting))
         ? (context.promptRepeatCount ?? 0) + 1
         : 1;
 
@@ -128,6 +185,12 @@ export async function POST(request: NextRequest) {
       barberAsked,
       anyBarber: Boolean(response.parsed.anyBarber) || Boolean(context.anyBarber),
       confirmed: response.parsed.confirmed,
+      preferredTimeRaw:
+        response.parsed.preferredTimeRaw ?? context.preferredTimeRaw,
+      hasExplicitMeridiem:
+        response.parsed.hasExplicitMeridiem ?? context.hasExplicitMeridiem,
+      isAmbiguousHour:
+        response.parsed.isAmbiguousHour ?? Boolean(response.parsed.ambiguousTime),
       messages: [
         ...(context.messages ?? []),
         {
@@ -143,13 +206,26 @@ export async function POST(request: NextRequest) {
       ].slice(-20),
     };
 
+    if (response.parsed.ambiguousTime) {
+      nextContext.pendingAmbiguousHour = response.parsed.ambiguousTime.hour;
+      nextContext.pendingAmbiguousMinute = response.parsed.ambiguousTime.minute;
+    } else {
+      delete nextContext.pendingAmbiguousHour;
+      delete nextContext.pendingAmbiguousMinute;
+    }
+
     log("parsed_fields", {
       intent: response.parsed.intent,
       clientName: response.parsed.clientName,
+      confirmedClientName: response.parsed.confirmedClientName,
       serviceName: response.parsed.serviceName,
       barberName: response.parsed.barberName,
       preferredDate: response.parsed.preferredDate,
       preferredTime: response.parsed.preferredTime,
+      preferredTimeRaw: response.parsed.preferredTimeRaw,
+      hasExplicitMeridiem: response.parsed.hasExplicitMeridiem,
+      isAmbiguousHour: response.parsed.isAmbiguousHour,
+      resolvedFinalTime: response.parsed.preferredTime ?? null,
       anyBarber: response.parsed.anyBarber,
       confirmed: response.parsed.confirmed,
       missingFields: response.parsed.missingFields,
@@ -178,7 +254,12 @@ export async function POST(request: NextRequest) {
       if (response.awaitingField === "clientName") clearPatch.clientName = null;
       if (response.awaitingField === "serviceName") clearPatch.serviceName = null;
       if (response.awaitingField === "preferredDate") clearPatch.preferredDate = null;
-      if (response.awaitingField === "preferredTime") clearPatch.preferredTime = null;
+      if (
+        response.awaitingField === "preferredTime" ||
+        response.awaitingField === "timeMeridiem"
+      ) {
+        clearPatch.preferredTime = null;
+      }
       if (response.awaitingField === "barberName") clearPatch.barberName = null;
       if (Object.keys(clearPatch).length > 0) {
         await updateCallSession(callSid, clearPatch);

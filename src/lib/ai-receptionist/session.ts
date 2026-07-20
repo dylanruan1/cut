@@ -17,6 +17,7 @@ export type SessionUpdate = {
   barbershopId?: string | null;
   intent?: string | null;
   clientName?: string | null;
+  confirmedClientName?: boolean;
   serviceName?: string | null;
   barberName?: string | null;
   preferredDate?: string | null;
@@ -98,7 +99,8 @@ export async function createCallSession(
   }
 
   if (existing) {
-    // Completed / expired / failed — start a clean slate for a new conversation.
+    // Completed / expired / failed — start a clean slate for a new
+    // conversation. Nothing name-related may leak from the old call.
     return prisma.receptionistCallSession.update({
       where: { callSid },
       data: {
@@ -106,6 +108,8 @@ export async function createCallSession(
         barbershopId: options?.barbershopId ?? existing.barbershopId,
         intent: null,
         clientName: null,
+        suggestedClientName: null,
+        confirmedClientName: false,
         serviceName: null,
         barberName: null,
         preferredDate: null,
@@ -159,6 +163,9 @@ export async function updateCallSession(
   if (partialData.barbershopId !== undefined) data.barbershopId = partialData.barbershopId;
   if (partialData.intent !== undefined) data.intent = partialData.intent;
   if (partialData.clientName !== undefined) data.clientName = partialData.clientName;
+  if (partialData.confirmedClientName !== undefined) {
+    data.confirmedClientName = partialData.confirmedClientName;
+  }
   if (partialData.serviceName !== undefined) data.serviceName = partialData.serviceName;
   if (partialData.barberName !== undefined) data.barberName = partialData.barberName;
   if (partialData.preferredDate !== undefined) data.preferredDate = partialData.preferredDate;
@@ -214,15 +221,33 @@ export async function mergeParsedRequestIntoSession(
       ? null
       : parsedRequest.barberName ?? current.barberName;
 
+  // Prefer explicit preferredTime; clear it when waiting on AM/PM disambiguation.
+  const nextPreferredTime =
+    extras?.awaitingField === "timeMeridiem"
+      ? null
+      : parsedRequest.preferredTime !== undefined
+        ? parsedRequest.preferredTime
+        : current.preferredTime;
+
   return updateCallSession(callSid, {
     barbershopId: extras?.barbershopId ?? current.barbershopId,
     intent:
       parsedRequest.intent !== "unknown" ? parsedRequest.intent : current.intent,
-    clientName: parsedRequest.clientName ?? current.clientName,
+    // Blank/whitespace names are treated as absent — they must never
+    // occupy the session name slot and suppress the name question.
+    clientName:
+      parsedRequest.clientName?.trim() || current.clientName?.trim() || null,
+    // True only when a name from the CALLER landed in the session this call.
+    confirmedClientName: Boolean(
+      parsedRequest.confirmedClientName ||
+        current.confirmedClientName ||
+        parsedRequest.clientName?.trim() ||
+        current.clientName?.trim()
+    ),
     serviceName: parsedRequest.serviceName ?? current.serviceName,
     barberName: nextBarberName,
     preferredDate: parsedRequest.preferredDate ?? current.preferredDate,
-    preferredTime: parsedRequest.preferredTime ?? current.preferredTime,
+    preferredTime: nextPreferredTime,
     awaitingField:
       extras?.awaitingField !== undefined
         ? extras.awaitingField
@@ -283,13 +308,28 @@ export function sessionToParsedState(
       session.status === "AWAITING_CONFIRMATION"
   );
 
+  const pendingHour = context.pendingAmbiguousHour;
+  const ambiguousTime =
+    typeof pendingHour === "number"
+      ? {
+          hour: pendingHour,
+          minute: context.pendingAmbiguousMinute ?? 0,
+        }
+      : undefined;
+
   return {
     intent: (session.intent as ReceptionistIntent | null) ?? undefined,
-    clientName: session.clientName ?? undefined,
+    // Trim so a stored blank can never masquerade as a collected name.
+    clientName: session.clientName?.trim() || undefined,
+    confirmedClientName: session.confirmedClientName,
     serviceName: session.serviceName ?? undefined,
     barberName: session.barberName ?? undefined,
     preferredDate: session.preferredDate ?? undefined,
     preferredTime: session.preferredTime ?? undefined,
+    preferredTimeRaw: context.preferredTimeRaw,
+    hasExplicitMeridiem: context.hasExplicitMeridiem,
+    isAmbiguousHour: context.isAmbiguousHour,
+    ambiguousTime,
     awaitingField,
     confirmed: context.confirmed,
     barberAsked,
@@ -310,6 +350,7 @@ export function summarizeSession(session: ReceptionistCallSession) {
     status: session.status,
     intent: session.intent,
     clientName: session.clientName,
+    confirmedClientName: session.confirmedClientName,
     serviceName: session.serviceName,
     barberName: session.barberName,
     preferredDate: session.preferredDate,

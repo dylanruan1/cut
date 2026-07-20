@@ -23,17 +23,40 @@ export type BookingField =
   | "barberName"
   | "confirmation";
 
-export type AwaitingField = BookingField | null;
+/** Includes timeMeridiem for AM/PM disambiguation mid-flow. */
+export type AwaitingField = BookingField | "timeMeridiem" | null;
+
+/** Ambiguous hour-only time awaiting AM/PM (1–12 clock hour). */
+export type AmbiguousTime = {
+  hour: number;
+  minute: number;
+};
 
 export type ParsedBookingRequest = {
   intent: ReceptionistIntent;
+  /**
+   * Name the caller gave on THIS call. NEVER auto-filled from a matched
+   * Client record, a previous call session, or an appointment snapshot —
+   * the receptionist always asks "What name should I put the appointment
+   * under?" when this is empty.
+   */
   clientName?: string;
+  /** True once the caller has spoken a name on this call. */
+  confirmedClientName?: boolean;
   serviceName?: string;
   barberName?: string;
   /** ISO date string YYYY-MM-DD when resolved */
   preferredDate?: string;
   /** 24h time HH:mm when resolved */
   preferredTime?: string;
+  /** Original spoken time fragment, e.g. "8" or "8 PM" */
+  preferredTimeRaw?: string;
+  /** True only when the caller explicitly said AM/PM */
+  hasExplicitMeridiem?: boolean;
+  /** True for unresolved bare 1-12 hour requests */
+  isAmbiguousHour?: boolean;
+  /** Hour-only preference pending AM/PM choice */
+  ambiguousTime?: AmbiguousTime;
   /** Explicit confirmation for final booking step */
   confirmed?: boolean;
   /** Skip preferred barber (any available) */
@@ -51,6 +74,12 @@ export type CallSessionContext = {
   barberAsked?: boolean;
   anyBarber?: boolean;
   confirmed?: boolean;
+  preferredTimeRaw?: string;
+  hasExplicitMeridiem?: boolean;
+  isAmbiguousHour?: boolean;
+  /** Pending ambiguous clock hour while awaitingField is timeMeridiem */
+  pendingAmbiguousHour?: number;
+  pendingAmbiguousMinute?: number;
   messages?: ReceptionistMessage[];
 };
 
@@ -107,6 +136,7 @@ export type ProcessReceptionistInput = {
     anyBarber?: boolean;
     confirmed?: boolean;
     barberAsked?: boolean;
+    ambiguousTime?: AmbiguousTime;
   };
   conversationHistory?: ReceptionistMessage[];
   /** Override "now" for deterministic tests */

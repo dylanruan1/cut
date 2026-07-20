@@ -1,5 +1,6 @@
 import { addDays, format, nextDay, type Day } from "date-fns";
 import type {
+  AmbiguousTime,
   AwaitingField,
   BookingField,
   ParsedBookingRequest,
@@ -7,6 +8,7 @@ import type {
   ShopContext,
 } from "./types";
 import { buildMissingInfoPrompt } from "./prompts";
+import { clockToHHmm } from "./time-disambiguation";
 
 const BOOK_PATTERNS = [
   /\b(book|booking|schedule|appointment|reserve)\b/i,
@@ -63,6 +65,7 @@ export function parseReceptionistMessage(
       anyBarber?: boolean;
       confirmed?: boolean;
       barberAsked?: boolean;
+      ambiguousTime?: AmbiguousTime;
     };
     now?: Date;
   }
@@ -103,8 +106,26 @@ export function parseReceptionistMessage(
   const clientName = extractClientName(rawText) ?? session.clientName;
   const preferredDate =
     extractPreferredDate(normalized, now) ?? session.preferredDate;
-  const preferredTime =
-    extractPreferredTime(normalized) ?? session.preferredTime;
+
+  const timeExtract = extractTimePreference(normalized);
+  let preferredTime = session.preferredTime;
+  let preferredTimeRaw = session.preferredTimeRaw;
+  let hasExplicitMeridiem = session.hasExplicitMeridiem;
+  let isAmbiguousHour = session.isAmbiguousHour;
+  let ambiguousTime = session.ambiguousTime;
+  if (timeExtract.status === "resolved") {
+    preferredTime = timeExtract.time;
+    preferredTimeRaw = timeExtract.raw;
+    hasExplicitMeridiem = timeExtract.hasExplicitMeridiem;
+    isAmbiguousHour = false;
+    ambiguousTime = undefined;
+  } else if (timeExtract.status === "ambiguous") {
+    preferredTime = undefined;
+    preferredTimeRaw = timeExtract.raw;
+    hasExplicitMeridiem = false;
+    isAmbiguousHour = true;
+    ambiguousTime = { hour: timeExtract.hour, minute: timeExtract.minute };
+  }
 
   const anyBarber =
     session.anyBarber ||
@@ -124,6 +145,10 @@ export function parseReceptionistMessage(
       barberName,
       preferredDate,
       preferredTime,
+      preferredTimeRaw,
+      hasExplicitMeridiem,
+      isAmbiguousHour,
+      ambiguousTime,
       confirmed,
       anyBarber,
       confidence: scoreConfidence(intent, {
@@ -142,7 +167,7 @@ export function parseReceptionistMessage(
 function parseContextualAnswer(
   rawText: string,
   normalized: string,
-  awaitingField: BookingField,
+  awaitingField: AwaitingField,
   opts: {
     serviceCatalog: string[];
     barberCatalog: string[];
@@ -151,14 +176,32 @@ function parseContextualAnswer(
       anyBarber?: boolean;
       confirmed?: boolean;
       barberAsked?: boolean;
+      ambiguousTime?: AmbiguousTime;
     };
   }
 ): Omit<ParsedBookingRequest, "rawText" | "missingFields"> | null {
+  if (!awaitingField) return null;
+
   const baseIntent =
     (opts.session.intent as ReceptionistIntent | undefined) &&
     opts.session.intent !== "unknown"
       ? (opts.session.intent as ReceptionistIntent)
       : "book_appointment";
+
+  const keep = {
+    intent: baseIntent,
+    clientName: opts.session.clientName,
+    serviceName: opts.session.serviceName,
+    barberName: opts.session.barberName,
+    preferredDate: opts.session.preferredDate,
+    preferredTime: opts.session.preferredTime,
+    preferredTimeRaw: opts.session.preferredTimeRaw,
+    hasExplicitMeridiem: opts.session.hasExplicitMeridiem,
+    isAmbiguousHour: opts.session.isAmbiguousHour,
+    ambiguousTime: opts.session.ambiguousTime,
+    anyBarber: opts.session.anyBarber,
+    confirmed: opts.session.confirmed,
+  };
 
   switch (awaitingField) {
     case "clientName": {
@@ -167,75 +210,85 @@ function parseContextualAnswer(
         extractBareName(rawText) ??
         undefined;
       if (!name) return null;
-      return {
-        intent: baseIntent,
-        clientName: name,
-        serviceName: opts.session.serviceName,
-        barberName: opts.session.barberName,
-        preferredDate: opts.session.preferredDate,
-        preferredTime: opts.session.preferredTime,
-        anyBarber: opts.session.anyBarber,
-        confirmed: opts.session.confirmed,
-        confidence: 0.9,
-      };
+      return { ...keep, clientName: name, confidence: 0.9 };
     }
     case "serviceName": {
       const serviceName =
         extractServiceName(normalized, opts.serviceCatalog) ??
         titleCase(normalized.replace(/^a\s+/, ""));
-      return {
-        intent: baseIntent,
-        clientName: opts.session.clientName,
-        serviceName,
-        barberName: opts.session.barberName,
-        preferredDate: opts.session.preferredDate,
-        preferredTime: opts.session.preferredTime,
-        anyBarber: opts.session.anyBarber,
-        confirmed: opts.session.confirmed,
-        confidence: 0.85,
-      };
+      return { ...keep, serviceName, confidence: 0.85 };
     }
     case "preferredDate": {
       const preferredDate = extractPreferredDate(normalized, opts.now);
       if (!preferredDate) return null;
-      return {
-        intent: baseIntent,
-        clientName: opts.session.clientName,
-        serviceName: opts.session.serviceName,
-        barberName: opts.session.barberName,
-        preferredDate,
-        preferredTime: opts.session.preferredTime,
-        anyBarber: opts.session.anyBarber,
-        confirmed: opts.session.confirmed,
-        confidence: 0.9,
-      };
+      return { ...keep, preferredDate, confidence: 0.9 };
     }
     case "preferredTime": {
-      const preferredTime = extractPreferredTime(normalized);
-      if (!preferredTime) return null;
+      // Answering "What time works best?" — a bare "4"/"four" is a time here.
+      const timeExtract = extractTimePreference(normalized, { assumeTime: true });
+      if (timeExtract.status === "resolved") {
+        return {
+          ...keep,
+          preferredTime: timeExtract.time,
+          preferredTimeRaw: timeExtract.raw,
+          hasExplicitMeridiem: timeExtract.hasExplicitMeridiem,
+          isAmbiguousHour: false,
+          ambiguousTime: undefined,
+          confidence: 0.9,
+        };
+      }
+      if (timeExtract.status === "ambiguous") {
+        return {
+          ...keep,
+          preferredTime: undefined,
+          preferredTimeRaw: timeExtract.raw,
+          hasExplicitMeridiem: false,
+          isAmbiguousHour: true,
+          ambiguousTime: {
+            hour: timeExtract.hour,
+            minute: timeExtract.minute,
+          },
+          confidence: 0.9,
+        };
+      }
+      return null;
+    }
+    case "timeMeridiem": {
+      const pending = opts.session.ambiguousTime;
+      if (!pending) return null;
+
+      const resolved = extractPreferredTime(normalized, { assumeTime: true });
+      if (resolved) {
+        return {
+          ...keep,
+          preferredTime: resolved,
+          preferredTimeRaw: normalized,
+          hasExplicitMeridiem: /\b[ap]\.?m\.?\b/i.test(normalized),
+          isAmbiguousHour: false,
+          ambiguousTime: undefined,
+          confidence: 0.95,
+        };
+      }
+
+      const meridiem = extractMeridiemAnswer(normalized);
+      if (!meridiem) return null;
+
       return {
-        intent: baseIntent,
-        clientName: opts.session.clientName,
-        serviceName: opts.session.serviceName,
-        barberName: opts.session.barberName,
-        preferredDate: opts.session.preferredDate,
-        preferredTime,
-        anyBarber: opts.session.anyBarber,
-        confirmed: opts.session.confirmed,
-        confidence: 0.9,
+        ...keep,
+        preferredTime: clockToHHmm(pending.hour, pending.minute, meridiem),
+        preferredTimeRaw: normalized,
+        hasExplicitMeridiem: /\b[ap]\.?m\.?\b/i.test(normalized),
+        isAmbiguousHour: false,
+        ambiguousTime: undefined,
+        confidence: 0.95,
       };
     }
     case "barberName": {
       if (ANY_BARBER_PATTERNS.test(normalized) || normalized === "any") {
         return {
-          intent: baseIntent,
-          clientName: opts.session.clientName,
-          serviceName: opts.session.serviceName,
-          preferredDate: opts.session.preferredDate,
-          preferredTime: opts.session.preferredTime,
+          ...keep,
           anyBarber: true,
           barberName: undefined,
-          confirmed: opts.session.confirmed,
           confidence: 0.9,
         };
       }
@@ -243,44 +296,14 @@ function parseContextualAnswer(
         extractBarberName(normalized, opts.barberCatalog) ??
         extractBareName(rawText);
       if (!barberName) return null;
-      return {
-        intent: baseIntent,
-        clientName: opts.session.clientName,
-        serviceName: opts.session.serviceName,
-        barberName,
-        preferredDate: opts.session.preferredDate,
-        preferredTime: opts.session.preferredTime,
-        anyBarber: false,
-        confirmed: opts.session.confirmed,
-        confidence: 0.9,
-      };
+      return { ...keep, barberName, anyBarber: false, confidence: 0.9 };
     }
     case "confirmation": {
       if (YES_PATTERNS.test(normalized)) {
-        return {
-          intent: baseIntent,
-          clientName: opts.session.clientName,
-          serviceName: opts.session.serviceName,
-          barberName: opts.session.barberName,
-          preferredDate: opts.session.preferredDate,
-          preferredTime: opts.session.preferredTime,
-          anyBarber: opts.session.anyBarber,
-          confirmed: true,
-          confidence: 0.95,
-        };
+        return { ...keep, confirmed: true, confidence: 0.95 };
       }
       if (NO_PATTERNS.test(normalized)) {
-        return {
-          intent: baseIntent,
-          clientName: opts.session.clientName,
-          serviceName: opts.session.serviceName,
-          barberName: opts.session.barberName,
-          preferredDate: opts.session.preferredDate,
-          preferredTime: opts.session.preferredTime,
-          anyBarber: opts.session.anyBarber,
-          confirmed: false,
-          confidence: 0.95,
-        };
+        return { ...keep, confirmed: false, confidence: 0.95 };
       }
       return null;
     }
@@ -297,6 +320,10 @@ function finalizeParsed(
     barberName?: string;
     preferredDate?: string;
     preferredTime?: string;
+    preferredTimeRaw?: string;
+    hasExplicitMeridiem?: boolean;
+    isAmbiguousHour?: boolean;
+    ambiguousTime?: AmbiguousTime;
     confirmed?: boolean;
     anyBarber?: boolean;
     confidence: number;
@@ -304,16 +331,34 @@ function finalizeParsed(
   session: Partial<ParsedBookingRequest> & {
     anyBarber?: boolean;
     barberAsked?: boolean;
+    ambiguousTime?: AmbiguousTime;
   },
   rawText: string
 ): ParsedBookingRequest {
-  const clientName = partial.clientName ?? session.clientName;
+  // Normalize so empty/whitespace names count as absent everywhere downstream.
+  const clientName =
+    (partial.clientName ?? session.clientName)?.trim() || undefined;
   const serviceName = partial.serviceName ?? session.serviceName;
   const barberName = partial.anyBarber
     ? undefined
     : partial.barberName ?? session.barberName;
   const preferredDate = partial.preferredDate ?? session.preferredDate;
-  const preferredTime = partial.preferredTime ?? session.preferredTime;
+  const preferredTime =
+    "preferredTime" in partial ? partial.preferredTime : session.preferredTime;
+  const preferredTimeRaw =
+    "preferredTimeRaw" in partial ? partial.preferredTimeRaw : session.preferredTimeRaw;
+  const hasExplicitMeridiem =
+    "hasExplicitMeridiem" in partial
+      ? partial.hasExplicitMeridiem
+      : session.hasExplicitMeridiem;
+  const isAmbiguousHour =
+    "isAmbiguousHour" in partial ? partial.isAmbiguousHour : session.isAmbiguousHour;
+  const ambiguousTime =
+    preferredTime != null
+      ? undefined
+      : "ambiguousTime" in partial
+        ? partial.ambiguousTime
+        : session.ambiguousTime;
   const anyBarber = partial.anyBarber ?? session.anyBarber;
   const confirmed = partial.confirmed ?? session.confirmed;
 
@@ -335,6 +380,10 @@ function finalizeParsed(
     barberName,
     preferredDate,
     preferredTime,
+    preferredTimeRaw,
+    hasExplicitMeridiem,
+    isAmbiguousHour,
+    ambiguousTime,
     confirmed,
     anyBarber,
     rawText,
@@ -390,7 +439,8 @@ export function getMissingFields(
   }
 
   const missing: BookingField[] = [];
-  if (!fields.clientName) missing.push("clientName");
+  // Whitespace-only is missing — a blank name must never reach confirmation.
+  if (!fields.clientName?.trim()) missing.push("clientName");
   if (!fields.serviceName) missing.push("serviceName");
   if (!fields.preferredDate) missing.push("preferredDate");
   if (!fields.preferredTime) missing.push("preferredTime");
@@ -522,38 +572,306 @@ export function extractPreferredDate(text: string, now: Date): string | undefine
   return undefined;
 }
 
-export function extractPreferredTime(text: string): string | undefined {
-  const amPm = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
-  if (amPm) {
-    let hour = parseInt(amPm[1], 10);
-    const minute = amPm[2] ? parseInt(amPm[2], 10) : 0;
-    const meridiem = amPm[3].toLowerCase().replace(/\./g, "");
-    if (meridiem.startsWith("p") && hour < 12) hour += 12;
-    if (meridiem.startsWith("a") && hour === 12) hour = 0;
-    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-  }
-
-  // "3:30" or "at 3:30"
-  const clock = text.match(/\b(?:at\s+)?(\d{1,2}):(\d{2})\b/);
-  if (clock) {
-    let hour = parseInt(clock[1], 10);
-    const minute = parseInt(clock[2], 10);
-    if (hour >= 1 && hour <= 7) hour += 12;
-    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
-      return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+export type TimePreferenceExtract =
+  | {
+      status: "resolved";
+      time: string;
+      raw: string;
+      hasExplicitMeridiem: boolean;
+      isAmbiguousHour: false;
     }
-  }
-
-  const bareHour = text.match(/\b(?:at\s+)?(\d{1,2})\b(?!\s*:)/);
-  if (bareHour) {
-    let hour = parseInt(bareHour[1], 10);
-    if (hour >= 1 && hour <= 7) hour += 12;
-    if (hour >= 8 && hour <= 23) {
-      return `${String(hour).padStart(2, "0")}:00`;
+  | {
+      status: "ambiguous";
+      raw: string;
+      hour: number;
+      minute: number;
+      hasExplicitMeridiem: false;
+      isAmbiguousHour: true;
     }
+  | { status: "none"; hasExplicitMeridiem: false; isAmbiguousHour: false };
+
+const CONTEXT_AM = /\b(in the morning|this morning|morning)\b/i;
+const CONTEXT_PM =
+  /\b(in the afternoon|this afternoon|afternoon|in the evening|this evening|evening|tonight|at night)\b/i;
+
+/** Spelled-out clock hours ("at four" / "four PM"). "for" is NEVER a number. */
+const HOUR_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+};
+const HOUR_TOKEN = `\\d{1,2}|${Object.keys(HOUR_WORDS).join("|")}`;
+
+function parseHourToken(token: string): number {
+  return HOUR_WORDS[token.toLowerCase()] ?? parseInt(token, 10);
+}
+
+/**
+ * Speech-to-text can transcribe "for a haircut" as "4 a haircut" /
+ * "four a haircut" (and "for an appointment" as "4 an appointment").
+ * A number immediately followed by an article is not a time.
+ */
+function hourFollowedByArticle(text: string, match: RegExpMatchArray): boolean {
+  const rest = text.slice((match.index ?? 0) + match[0].length);
+  return /^\s+an?\s+[a-z]/i.test(rest);
+}
+
+export type ExtractTimeOptions = {
+  /**
+   * True when the caller is answering a time question (awaitingField is
+   * preferredTime / timeMeridiem) — a bare "4" or "four" is then a valid
+   * (ambiguous) time answer even without "at"/"around"/AM/PM context.
+   */
+  assumeTime?: boolean;
+};
+
+/**
+ * Detects explicit AM/PM, contextual meridiem ("8 tonight"), or ambiguous hour-only.
+ * Does not guess AM/PM for bare hours; callers ask the caller to choose.
+ *
+ * A number is only treated as a time with clear time context: "at 4",
+ * "around four", "4 PM", "4:30", "4 o'clock", "8 in the morning",
+ * "book me for 6", noon/midnight — or when `assumeTime` says the caller is
+ * answering a time question. Free-floating digits (e.g. STT turning
+ * "for a haircut" into "4 a haircut") are never times.
+ */
+export function extractTimePreference(
+  text: string,
+  options?: ExtractTimeOptions
+): TimePreferenceExtract {
+  const assumeTime = options?.assumeTime ?? false;
+  const { result, source } = extractTimePreferenceInternal(text, assumeTime);
+  console.log("[ai-receptionist/parser] time extraction", {
+    transcript: text,
+    assumeTime,
+    status: result.status,
+    time: result.status === "resolved" ? result.time : null,
+    ambiguousHour: result.status === "ambiguous" ? result.hour : null,
+    hasExplicitMeridiem: result.hasExplicitMeridiem,
+    // Why a time was or was not extracted (e.g. explicit_meridiem,
+    // time_context_prefix, no_time_context, article_after_number).
+    source,
+  });
+  return result;
+}
+
+function extractTimePreferenceInternal(
+  text: string,
+  assumeTime: boolean
+): { result: TimePreferenceExtract; source: string } {
+  const none = (source: string) => ({
+    result: {
+      status: "none" as const,
+      hasExplicitMeridiem: false as const,
+      isAmbiguousHour: false as const,
+    },
+    source,
+  });
+
+  if (/\bnoon\b/i.test(text)) {
+    return {
+      result: {
+        status: "resolved",
+        time: "12:00",
+        raw: "noon",
+        hasExplicitMeridiem: false,
+        isAmbiguousHour: false,
+      },
+      source: "noon_keyword",
+    };
   }
 
-  return undefined;
+  if (/\bmidnight\b/i.test(text)) {
+    return {
+      result: {
+        status: "resolved",
+        time: "00:00",
+        raw: "midnight",
+        hasExplicitMeridiem: false,
+        isAmbiguousHour: false,
+      },
+      source: "midnight_keyword",
+    };
+  }
+
+  // "4 PM" / "four PM" / "4:30 pm" — explicit meridiem is time context.
+  const explicit = text.match(
+    new RegExp(
+      `\\b(${HOUR_TOKEN})(?::(\\d{2}))?\\s*(a\\.?m\\.?|p\\.?m\\.?)\\b`,
+      "i"
+    )
+  );
+  if (explicit) {
+    const hour = parseHourToken(explicit[1]);
+    const minute = explicit[2] ? parseInt(explicit[2], 10) : 0;
+    if (!isValidClock(hour, minute) || hour < 1 || hour > 12) {
+      return none("explicit_meridiem_invalid_clock");
+    }
+    const meridiem = explicit[3].toLowerCase().replace(/\./g, "").startsWith("p")
+      ? "pm"
+      : "am";
+    return {
+      result: {
+        status: "resolved",
+        time: clockToHHmm(hour, minute, meridiem),
+        raw: explicit[0],
+        hasExplicitMeridiem: true,
+        isAmbiguousHour: false,
+      },
+      source: "explicit_meridiem",
+    };
+  }
+
+  // "4:30" — a colon is inherently time-shaped.
+  const clockMatch = text.match(/\b(?:at\s+|around\s+)?(\d{1,2}):(\d{2})\b/);
+  // "at 4" / "around four" / "book me for 6" — preposition is time context.
+  // ("for" only counts with a real number AFTER it; the word "for" itself is
+  // never the number four.)
+  const prefixMatch = text.match(
+    new RegExp(`\\b(?:at|around|for)\\s+(${HOUR_TOKEN})\\b(?!\\s*:)`, "i")
+  );
+  // "4 o'clock" / "four o'clock".
+  const oclockMatch = text.match(
+    new RegExp(`\\b(${HOUR_TOKEN})\\s*o'?clock\\b`, "i")
+  );
+  // Bare number: only a time when answering a time question, or when the
+  // sentence carries meridiem words ("8 tonight", "8 in the morning").
+  const bareAllowed =
+    assumeTime || CONTEXT_AM.test(text) || CONTEXT_PM.test(text);
+  const bareMatch = bareAllowed
+    ? text.match(new RegExp(`\\b(${HOUR_TOKEN})\\b(?!\\s*:)`, "i"))
+    : null;
+
+  let hour: number | undefined;
+  let minute = 0;
+  let raw: string | undefined;
+  let source: string;
+  if (clockMatch) {
+    hour = parseInt(clockMatch[1], 10);
+    minute = parseInt(clockMatch[2], 10);
+    raw = clockMatch[0].trim();
+    source = "clock_colon";
+  } else if (prefixMatch) {
+    if (hourFollowedByArticle(text, prefixMatch)) {
+      return none("article_after_number");
+    }
+    hour = parseHourToken(prefixMatch[1]);
+    raw = prefixMatch[1];
+    source = "time_context_prefix";
+  } else if (oclockMatch) {
+    hour = parseHourToken(oclockMatch[1]);
+    raw = oclockMatch[1];
+    source = "oclock_suffix";
+  } else if (bareMatch) {
+    if (hourFollowedByArticle(text, bareMatch)) {
+      return none("article_after_number");
+    }
+    hour = parseHourToken(bareMatch[1]);
+    raw = bareMatch[1];
+    source = assumeTime ? "assumed_time_answer" : "context_meridiem_words";
+  } else {
+    return none("no_time_context");
+  }
+
+  if (hour === undefined || !isValidClock(hour, minute)) {
+    return none("invalid_clock");
+  }
+
+  // 24h times like "15" / "15:30" are already unambiguous.
+  if (hour > 12) {
+    return {
+      result: {
+        status: "resolved",
+        time: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+        raw: raw ?? String(hour),
+        hasExplicitMeridiem: false,
+        isAmbiguousHour: false,
+      },
+      source: `${source}_24h`,
+    };
+  }
+
+  const hasAm = CONTEXT_AM.test(text);
+  const hasPm = CONTEXT_PM.test(text);
+  if (hasAm && !hasPm) {
+    return {
+      result: {
+        status: "resolved",
+        time: clockToHHmm(hour, minute, "am"),
+        raw: raw ?? String(hour),
+        hasExplicitMeridiem: false,
+        isAmbiguousHour: false,
+      },
+      source: `${source}_context_am`,
+    };
+  }
+  if (hasPm && !hasAm) {
+    return {
+      result: {
+        status: "resolved",
+        time: clockToHHmm(hour, minute, "pm"),
+        raw: raw ?? String(hour),
+        hasExplicitMeridiem: false,
+        isAmbiguousHour: false,
+      },
+      source: `${source}_context_pm`,
+    };
+  }
+
+  // 0 only makes sense as midnight (12 AM) — treat as ambiguous 12-clock via hour 12
+  const clockHour = hour === 0 ? 12 : hour;
+  return {
+    result: {
+      status: "ambiguous",
+      raw: raw ?? String(clockHour),
+      hour: clockHour,
+      minute,
+      hasExplicitMeridiem: false,
+      isAmbiguousHour: true,
+    },
+    source: `${source}_ambiguous`,
+  };
+}
+
+/** Resolved HH:mm only when the utterance is unambiguous. */
+export function extractPreferredTime(
+  text: string,
+  options?: ExtractTimeOptions
+): string | undefined {
+  const result = extractTimePreference(text, options);
+  return result.status === "resolved" ? result.time : undefined;
+}
+
+/** Parses AM/PM answers while awaitingField is timeMeridiem. */
+export function extractMeridiemAnswer(text: string): "am" | "pm" | null {
+  const normalized = text.toLowerCase().trim();
+
+  if (/\bp\.?m\.?\b/i.test(normalized)) return "pm";
+  if (/\ba\.?m\.?\b/i.test(normalized)) return "am";
+  if (/\b(evening|tonight|afternoon|night)\b/i.test(normalized)) return "pm";
+  if (/\bmorning\b/i.test(normalized)) return "am";
+
+  return null;
+}
+
+function isValidClock(hour: number, minute: number): boolean {
+  return (
+    Number.isFinite(hour) &&
+    Number.isFinite(minute) &&
+    hour >= 0 &&
+    hour <= 23 &&
+    minute >= 0 &&
+    minute <= 59
+  );
 }
 
 function titleCase(value: string): string {

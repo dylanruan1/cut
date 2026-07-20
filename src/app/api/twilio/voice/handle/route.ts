@@ -110,7 +110,7 @@ async function createBookingFromSession(data: SessionData, callSid: string): Pro
     shop = await findDevFallbackBarbershop(toNumber || "(legacy-handle)");
   }
   if (!shop) {
-    return twimlSay("Sorry, this number is not connected to a barbershop yet. Goodbye.");
+    return twimlSay("Sorry, this phone number is not connected to a barbershop yet. Goodbye.");
   }
 
   return await bookAppointment(shop.id, data);
@@ -181,7 +181,7 @@ async function bookAppointment(barbershopId: string, data: SessionData): Promise
   );
 
   return twimlSay(
-    `Your appointment for ${service.name} with ${barber.name} on ${dateTime} has been booked. You will receive a confirmation text. Goodbye.`
+    `Your appointment for ${service.name} with barber ${barber.name} on ${dateTime} has been booked. You will receive a confirmation text. Goodbye.`
   );
 }
 

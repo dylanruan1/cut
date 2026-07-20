@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { loginSchema, signupSchema, appointmentSchema } from "@/lib/validators";
+import {
+  loginSchema,
+  signupSchema,
+  appointmentSchema,
+  shopSettingsSchema,
+} from "@/lib/validators";
 
 describe("validators", () => {
   it("loginSchema validates email and password", () => {
@@ -45,5 +50,29 @@ describe("validators", () => {
       startTime: "",
     });
     expect(invalid.success).toBe(false);
+  });
+
+  it("shopSettingsSchema accepts Twilio phone and setup fields", () => {
+    const valid = shopSettingsSchema.safeParse({
+      name: "Westside Barbers",
+      timezone: "America/Los_Angeles",
+      twilioPhone: "+1 (555) 123-4567",
+      phoneSetupMethod: "NEW_TWILIO",
+      phoneSetupStatus: "CONNECTED",
+      phonePortingNotes: "Carrier account 123",
+    });
+    expect(valid.success).toBe(true);
+    if (valid.success) {
+      expect(valid.data.twilioPhone).toBe("+1 (555) 123-4567");
+      expect(valid.data.phoneSetupMethod).toBe("NEW_TWILIO");
+      expect(valid.data.phoneSetupStatus).toBe("CONNECTED");
+    }
+
+    const badMethod = shopSettingsSchema.safeParse({
+      name: "Shop",
+      timezone: "America/Los_Angeles",
+      phoneSetupMethod: "BUY_ELSEWHERE",
+    });
+    expect(badMethod.success).toBe(false);
   });
 });

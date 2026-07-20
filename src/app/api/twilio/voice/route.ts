@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     await ensureReceptionistSession(callSid, from, shop.id);
 
-    const greeting = getReceptionistGreeting();
+    const greeting = getReceptionistGreeting(shop.name);
     const twiml = generateTwimlResponse(
       twimlSpeechGather(`${baseUrl}/api/twilio/voice/process`, greeting)
     );

@@ -1,12 +1,22 @@
 import type { BookingField, ReceptionistIntent } from "./types";
 
+/** Default greeting used only when no shop name is available (tests / legacy). */
 export const GREETING =
   "Thanks for calling Cut. I'm the AI receptionist. I can help you book, reschedule, or cancel an appointment. How can I help you today?";
 
+export function getReceptionistGreeting(shopName: string): string {
+  const name = shopName.trim() || "Cut";
+  return `Thanks for calling ${name}. I'm the AI receptionist. I can help you book, reschedule, or cancel an appointment. How can I help you today?`;
+}
+
+export function isReceptionistGreeting(speak: string): boolean {
+  return /^Thanks for calling .+\. I'm the AI receptionist\./i.test(speak.trim());
+}
+
 export const FOLLOW_UP_PROMPTS: Record<BookingField, string> = {
-  clientName: "What's your name?",
+  clientName: "What name should I put the appointment under?",
   serviceName: "What service would you like?",
-  preferredDate: "What day works best?",
+  preferredDate: "What day works best for you?",
   preferredTime: "What time works best?",
   barberName: "Do you have a preferred barber? You can say a name, or say any available.",
   confirmation: "Should I go ahead and book that for you? Please say yes or no.",
@@ -41,6 +51,32 @@ export function intentAcknowledgement(intent: ReceptionistIntent): string {
     default:
       return "";
   }
+}
+
+/**
+ * Speech-safe description of a booking, e.g.
+ * "Haircut under the name Dylan with barber Chris at Westside Barbers".
+ *
+ * The client is always introduced as "under the name X" and the barber as
+ * "with barber Y" so a listener can never mistake the client for the barber.
+ * Pass barberName only when the caller explicitly asked for that barber;
+ * omit it entirely when they have no preference.
+ * Pass shopName so confirmation speech names the barbershop.
+ */
+export function describeBookingForVoice(input: {
+  serviceName?: string | null;
+  clientName?: string | null;
+  barberName?: string | null;
+  shopName?: string | null;
+}): string {
+  const parts = [input.serviceName?.trim() || "an appointment"];
+  const clientName = input.clientName?.trim();
+  if (clientName) parts.push(`under the name ${clientName}`);
+  const barberName = input.barberName?.trim();
+  if (barberName) parts.push(`with barber ${barberName}`);
+  const shopName = input.shopName?.trim();
+  if (shopName) parts.push(`at ${shopName}`);
+  return parts.join(" ");
 }
 
 /**

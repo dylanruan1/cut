@@ -6,7 +6,7 @@ import {
 import type { ShopContext } from "@/lib/ai-receptionist/types";
 
 export const UNCONNECTED_NUMBER_MESSAGE =
-  "Sorry, this number is not connected to a barbershop yet. Goodbye.";
+  "Sorry, this phone number is not connected to a barbershop yet. Goodbye.";
 
 /**
  * Resolve shop for an inbound Twilio To number.

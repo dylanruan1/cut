@@ -55,6 +55,19 @@ export const barberSchema = z.object({
   color: z.string().optional(),
 });
 
+export const phoneSetupMethodSchema = z.enum([
+  "NEW_TWILIO",
+  "FORWARD_EXISTING",
+  "PORT_TO_TWILIO",
+]);
+
+export const phoneSetupStatusSchema = z.enum([
+  "NOT_STARTED",
+  "PENDING",
+  "CONNECTED",
+  "ERROR",
+]);
+
 export const shopSettingsSchema = z.object({
   name: z.string().min(1, "Business name is required"),
   address: z.string().optional(),
@@ -62,6 +75,9 @@ export const shopSettingsSchema = z.object({
   instagram: z.string().optional(),
   timezone: z.string().min(1, "Timezone is required"),
   twilioPhone: z.string().optional(),
+  phoneSetupMethod: phoneSetupMethodSchema.optional().nullable(),
+  phoneSetupStatus: phoneSetupStatusSchema.optional(),
+  phonePortingNotes: z.string().optional().nullable(),
 });
 
 export const inviteSchema = z.object({

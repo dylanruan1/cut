@@ -44,9 +44,13 @@ const shopFixture: ShopContext = {
 };
 
 describe("booking conversation persistence", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("stores service/date/time from first utterance and asks for name", async () => {
     const response = await processReceptionistMessage({
-      text: "I want a haircut tomorrow at 3",
+      text: "I want a haircut tomorrow at 3 PM",
       callerPhone: "+1215551234567",
       shop: shopFixture,
       now: FIXED_NOW,
@@ -85,6 +89,20 @@ describe("booking conversation persistence", () => {
   });
 
   it("treats no preference as skipping barber", async () => {
+    vi.spyOn(booking, "checkBookingAvailability").mockResolvedValue({
+      available: true,
+      options: [
+        {
+          startTime: "2026-07-11T22:00:00.000Z",
+          endTime: "2026-07-11T22:30:00.000Z",
+          barberId: "barber_chris",
+          barberName: "Chris",
+          serviceId: "svc_haircut",
+          serviceName: "Haircut",
+        },
+      ],
+    });
+
     const response = await processReceptionistMessage({
       text: "no preference",
       callerPhone: "+1215551234567",
@@ -103,7 +121,10 @@ describe("booking conversation persistence", () => {
     expect(response.parsed.anyBarber).toBe(true);
     expect(response.parsed.clientName).toBe("Dylan");
     expect(response.awaitingField).toBe("confirmation");
-    expect(response.speak.toLowerCase()).toMatch(/book|yes|no|go ahead/);
+    expect(response.speak.toLowerCase()).toMatch(/book|yes|no|go ahead|confirm/);
+    expect(response.speak).toMatch(/3:00 PM/);
+    expect(response.speak).toMatch(/under the name Dylan/);
+    expect(response.speak).toMatch(/at Cut Demo/);
   });
 
   it("confirms booking with yes and creates an appointment", async () => {
@@ -189,6 +210,111 @@ describe("session helpers", () => {
     expect(state.serviceName).toBe("Haircut");
     expect(state.awaitingField).toBe("clientName");
     expect(state.preferredTime).toBe("15:00");
+  });
+});
+
+describe('service phrases never parse "for" as a time', () => {
+  it('"I want to make an appointment for a haircut" → service only, no time', async () => {
+    const parsed = parseReceptionistMessage(
+      "I want to make an appointment for a haircut",
+      { shop: shopFixture, now: FIXED_NOW }
+    );
+    expect(parsed.intent).toBe("book_appointment");
+    expect(parsed.serviceName).toBe("Haircut");
+    expect(parsed.preferredTime).toBeUndefined();
+    expect(parsed.ambiguousTime).toBeUndefined();
+    expect(parsed.isAmbiguousHour).toBeFalsy();
+
+    const response = await processReceptionistMessage({
+      text: "I want to make an appointment for a haircut",
+      callerPhone: "+1215551234567",
+      shop: shopFixture,
+      now: FIXED_NOW,
+    });
+    // Must not jump into AM/PM disambiguation or announce "at four".
+    expect(response.awaitingField).not.toBe("timeMeridiem");
+    expect(response.speak).not.toMatch(/at (4|four)/i);
+    expect(response.speak).not.toMatch(/am or pm/i);
+  });
+
+  it('"I want to book a haircut" → service, no time', () => {
+    const parsed = parseReceptionistMessage("I want to book a haircut", {
+      shop: shopFixture,
+      now: FIXED_NOW,
+    });
+    expect(parsed.serviceName).toBe("Haircut");
+    expect(parsed.preferredTime).toBeUndefined();
+    expect(parsed.ambiguousTime).toBeUndefined();
+  });
+
+  it('"I need a fade" → service, no time', () => {
+    const parsed = parseReceptionistMessage("I need a fade", {
+      shop: shopFixture,
+      now: FIXED_NOW,
+    });
+    expect(parsed.intent).toBe("book_appointment");
+    expect(parsed.serviceName).toBe("Fade");
+    expect(parsed.preferredTime).toBeUndefined();
+    expect(parsed.ambiguousTime).toBeUndefined();
+  });
+
+  it('"I want a haircut at four" → ambiguous 4 asking AM or PM', async () => {
+    const response = await processReceptionistMessage({
+      text: "I want a haircut tomorrow at four",
+      callerPhone: "+1215551234567",
+      shop: shopFixture,
+      now: FIXED_NOW,
+      session: {
+        intent: "book_appointment",
+        clientName: "Dylan",
+      },
+    });
+    expect(response.awaitingField).toBe("timeMeridiem");
+    expect(response.parsed.ambiguousTime).toEqual({ hour: 4, minute: 0 });
+    expect(response.parsed.preferredTime).toBeUndefined();
+  });
+
+  it('"I want a haircut at 4 PM" → 16:00', () => {
+    const parsed = parseReceptionistMessage("I want a haircut at 4 PM", {
+      shop: shopFixture,
+      now: FIXED_NOW,
+    });
+    expect(parsed.serviceName).toBe("Haircut");
+    expect(parsed.preferredTime).toBe("16:00");
+    expect(parsed.hasExplicitMeridiem).toBe(true);
+  });
+
+  it("service known but date missing → asks what day works best", async () => {
+    const response = await processReceptionistMessage({
+      text: "haircut please",
+      callerPhone: "+1215551234567",
+      shop: shopFixture,
+      now: FIXED_NOW,
+      session: {
+        intent: "book_appointment",
+        clientName: "Dylan",
+        awaitingField: "serviceName",
+      },
+    });
+    expect(response.awaitingField).toBe("preferredDate");
+    expect(response.speak).toMatch(/what day works best for you\?/i);
+  });
+
+  it("date known but time missing → asks what time works best", async () => {
+    const response = await processReceptionistMessage({
+      text: "tomorrow",
+      callerPhone: "+1215551234567",
+      shop: shopFixture,
+      now: FIXED_NOW,
+      session: {
+        intent: "book_appointment",
+        clientName: "Dylan",
+        serviceName: "Haircut",
+        awaitingField: "preferredDate",
+      },
+    });
+    expect(response.awaitingField).toBe("preferredTime");
+    expect(response.speak).toMatch(/what time works best\?/i);
   });
 });
 
