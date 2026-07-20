@@ -47,7 +47,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       barbershop: {
         select: { id: true, name: true, slug: true, timezone: true },
       },
-      barber: { select: { id: true } },
     },
   });
 
@@ -105,13 +104,23 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const barbershopId = barbershop?.id ?? null;
   const role = activeMembership?.role ?? dbUser.role;
 
+  // Resolve barber profile for the active shop (User.barber is 1:1 legacy; barbers are per-shop).
+  let barberId: string | null = null;
+  if (barbershopId) {
+    const activeBarber = await prisma.barber.findFirst({
+      where: { userId: dbUser.id, barbershopId },
+      select: { id: true },
+    });
+    barberId = activeBarber?.id ?? null;
+  }
+
   return {
     id: dbUser.id,
     email: dbUser.email,
     name: dbUser.name,
     role,
     barbershopId,
-    barberId: dbUser.barber?.id ?? null,
+    barberId,
     barbershop,
     memberships,
   };

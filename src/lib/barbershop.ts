@@ -4,9 +4,19 @@ import prisma from "@/lib/db";
 import { DEFAULT_SERVICES } from "@/lib/dates";
 import { generateSlug } from "@/lib/utils";
 import { normalizePhone } from "@/lib/twilio";
+import {
+  ACTIVE_SHOP_COOKIE,
+  DEFAULT_TIMEZONE,
+  DEV_TEST_SHOP_2_NAME,
+  isDevelopmentEnvironment,
+} from "@/lib/shop-constants";
 
-export const ACTIVE_SHOP_COOKIE = "cut_active_barbershop_id";
-export const DEFAULT_TIMEZONE = "America/Los_Angeles";
+export {
+  ACTIVE_SHOP_COOKIE,
+  DEFAULT_TIMEZONE,
+  DEV_TEST_SHOP_2_NAME,
+  isDevelopmentEnvironment,
+} from "@/lib/shop-constants";
 
 export type ShopMembershipSummary = {
   id: string;
@@ -101,6 +111,8 @@ export type CreateShopInput = {
   phone?: string | null;
   address?: string | null;
   twilioPhone?: string | null;
+  /** When false, adds membership without switching the user's active shop. Default true. */
+  setAsActive?: boolean;
 };
 
 /**
@@ -146,28 +158,47 @@ export async function createBarbershopWithOwner(
     },
   });
 
-  await prisma.$transaction([
-    prisma.barbershopMembership.create({
+  const setAsActive = input.setAsActive !== false;
+
+  if (setAsActive) {
+    await prisma.$transaction([
+      prisma.barbershopMembership.create({
+        data: {
+          userId: input.ownerUserId,
+          barbershopId: barbershop.id,
+          role: UserRole.OWNER,
+        },
+      }),
+      prisma.user.update({
+        where: { id: input.ownerUserId },
+        data: {
+          barbershopId: barbershop.id,
+          role: UserRole.OWNER,
+          name: input.ownerName,
+        },
+      }),
+    ]);
+  } else {
+    await prisma.barbershopMembership.create({
       data: {
         userId: input.ownerUserId,
         barbershopId: barbershop.id,
         role: UserRole.OWNER,
       },
-    }),
-    prisma.user.update({
-      where: { id: input.ownerUserId },
-      data: {
-        barbershopId: barbershop.id,
-        role: UserRole.OWNER,
-        name: input.ownerName,
-      },
-    }),
-  ]);
+    });
+  }
+
+  // User.barber is 1:1 — only link userId when the owner has no barber profile yet.
+  const existingOwnerBarber = await prisma.barber.findUnique({
+    where: { userId: input.ownerUserId },
+    select: { id: true },
+  });
+  const ownerBarberUserId = existingOwnerBarber ? null : input.ownerUserId;
 
   const ownerBarber = await prisma.barber.create({
     data: {
       barbershopId: barbershop.id,
-      userId: input.ownerUserId,
+      userId: ownerBarberUserId,
       name: input.ownerName,
       email: input.ownerEmail,
       color: "#007AFF",
@@ -195,9 +226,60 @@ export async function createBarbershopWithOwner(
     });
   }
 
-  await setActiveBarbershopCookie(barbershop.id);
+  if (setAsActive) {
+    await setActiveBarbershopCookie(barbershop.id);
+  }
 
   return barbershop;
+}
+
+/**
+ * Creates an additional barbershop for an existing owner without switching their active shop.
+ * Does not copy appointments or Twilio settings from other shops.
+ */
+export async function createAdditionalBarbershopForOwner(
+  input: Omit<CreateShopInput, "setAsActive">
+): Promise<Barbershop> {
+  return createBarbershopWithOwner({ ...input, setAsActive: false });
+}
+
+/**
+ * Dev-only: create "Test Shop 2" for the current user if it doesn't exist yet.
+ * Returns the shop and whether it was newly created.
+ */
+export async function createDevTestShop2ForUser(user: {
+  id: string;
+  name: string | null;
+  email: string;
+  memberships: ShopMembershipSummary[];
+}): Promise<
+  | { shop: Barbershop; created: boolean }
+  | { error: string }
+> {
+  if (!isDevelopmentEnvironment()) {
+    return { error: "Only available in development" };
+  }
+
+  const existing = user.memberships.find(
+    (m) => m.barbershop.name === DEV_TEST_SHOP_2_NAME
+  );
+  if (existing) {
+    const shop = await prisma.barbershop.findUnique({
+      where: { id: existing.barbershop.id },
+    });
+    if (!shop) return { error: "Test Shop 2 membership found but shop missing" };
+    return { shop, created: false };
+  }
+
+  const shop = await createAdditionalBarbershopForOwner({
+    name: DEV_TEST_SHOP_2_NAME,
+    timezone: DEFAULT_TIMEZONE,
+    ownerUserId: user.id,
+    ownerName: user.name ?? user.email.split("@")[0],
+    ownerEmail: user.email,
+  });
+
+  return { shop, created: true };
 }
 
 /**

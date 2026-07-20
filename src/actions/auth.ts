@@ -8,7 +8,7 @@ import {
   forgotPasswordSchema,
   onboardingSchema,
 } from "@/lib/validators";
-import { createBarbershopWithOwner } from "@/lib/barbershop";
+import { createBarbershopWithOwner, createDevTestShop2ForUser } from "@/lib/barbershop";
 import { UserRole } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -94,6 +94,20 @@ export async function setActiveShop(barbershopId: string) {
   if ("error" in result) return result;
   revalidatePath("/");
   return { success: true as const };
+}
+
+/** Development-only: create "Test Shop 2" for multi-shop testing without switching active shop. */
+export async function createDevTestShop2() {
+  const user = await requireUser();
+  const result = await createDevTestShop2ForUser(user);
+  if ("error" in result) return { error: result.error };
+  revalidatePath("/");
+  return {
+    success: true as const,
+    shopId: result.shop.id,
+    shopName: result.shop.name,
+    created: result.created,
+  };
 }
 
 export async function signIn(formData: FormData) {

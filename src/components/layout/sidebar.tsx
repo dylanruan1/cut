@@ -4,6 +4,11 @@ import { cn } from "@/lib/utils";
 import { Calendar, Users, Settings, LayoutDashboard, Search, Scissors, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  ShopSwitcher,
+  type ShopMembershipOption,
+} from "@/components/layout/shop-switcher";
+import { DevTestShopButton } from "@/components/layout/dev-test-shop-button";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -15,7 +20,23 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar({ className }: { className?: string }) {
+interface SidebarProps {
+  className?: string;
+  shopName?: string;
+  memberships?: ShopMembershipOption[];
+  activeShopId?: string | null;
+  showDevTools?: boolean;
+  hasTestShop2?: boolean;
+}
+
+export function Sidebar({
+  className,
+  shopName,
+  memberships = [],
+  activeShopId,
+  showDevTools = false,
+  hasTestShop2 = false,
+}: SidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -26,7 +47,7 @@ export function Sidebar({ className }: { className?: string }) {
       )}
       aria-label="Main navigation"
     >
-      <div className="px-3 py-4 mb-4">
+      <div className="px-3 py-4 mb-2">
         <Link href="/dashboard" className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-xl bg-primary flex items-center justify-center">
             <Scissors className="h-4 w-4 text-primary-foreground" aria-hidden="true" />
@@ -34,7 +55,17 @@ export function Sidebar({ className }: { className?: string }) {
           <span className="text-xl font-semibold tracking-tight">Cut.</span>
         </Link>
       </div>
-      <nav className="flex flex-col gap-1" role="navigation">
+
+      <div className="px-1 mb-4">
+        <ShopSwitcher
+          shopName={shopName}
+          memberships={memberships}
+          activeShopId={activeShopId}
+          variant="sidebar"
+        />
+      </div>
+
+      <nav className="flex flex-col gap-1 flex-1" role="navigation">
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -56,6 +87,15 @@ export function Sidebar({ className }: { className?: string }) {
           );
         })}
       </nav>
+
+      {showDevTools && (
+        <div className="mt-auto pt-4 border-t space-y-2">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">
+            Dev tools
+          </p>
+          <DevTestShopButton hasTestShop2={hasTestShop2} />
+        </div>
+      )}
     </aside>
   );
 }

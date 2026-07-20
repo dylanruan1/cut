@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Moon, Sun, Bell, LogOut, Scissors, ChevronsUpDown, Check } from "lucide-react";
+import { Menu, Moon, Sun, Bell, LogOut, Scissors } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,34 +11,27 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { navItems } from "@/components/layout/sidebar";
 import { usePathname, useRouter } from "next/navigation";
 import { cn, getInitials } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { setActiveShop } from "@/actions/auth";
-import { useTransition } from "react";
-
-type MembershipOption = {
-  id: string;
-  role: string;
-  barbershop: {
-    id: string;
-    name: string;
-    slug: string;
-    timezone: string;
-  };
-};
+import {
+  ShopSwitcher,
+  type ShopMembershipOption,
+} from "@/components/layout/shop-switcher";
+import { DevTestShopButton } from "@/components/layout/dev-test-shop-button";
 
 interface HeaderProps {
   userName?: string | null;
   userEmail?: string;
   avatarUrl?: string | null;
   shopName?: string;
-  memberships?: MembershipOption[];
+  memberships?: ShopMembershipOption[];
   activeShopId?: string | null;
+  showDevTools?: boolean;
+  hasTestShop2?: boolean;
 }
 
 export function Header({
@@ -48,11 +41,12 @@ export function Header({
   shopName,
   memberships = [],
   activeShopId,
+  showDevTools = false,
+  hasTestShop2 = false,
 }: HeaderProps) {
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
 
   async function handleLogout() {
     const supabase = createClient();
@@ -60,16 +54,6 @@ export function Header({
     router.push("/login");
     router.refresh();
   }
-
-  function handleSwitchShop(barbershopId: string) {
-    if (barbershopId === activeShopId) return;
-    startTransition(async () => {
-      await setActiveShop(barbershopId);
-      router.refresh();
-    });
-  }
-
-  const showSwitcher = memberships.length > 1;
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background/80 backdrop-blur-glass px-4 lg:px-6">
@@ -80,11 +64,19 @@ export function Header({
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-4">
-          <div className="flex items-center gap-2 mb-6">
+          <div className="flex items-center gap-2 mb-4">
             <div className="h-8 w-8 rounded-xl bg-primary flex items-center justify-center">
               <Scissors className="h-4 w-4 text-primary-foreground" />
             </div>
             <span className="text-xl font-semibold">Cut.</span>
+          </div>
+          <div className="mb-4">
+            <ShopSwitcher
+              shopName={shopName}
+              memberships={memberships}
+              activeShopId={activeShopId}
+              variant="sidebar"
+            />
           </div>
           <nav className="flex flex-col gap-1">
             {navItems.map((item) => {
@@ -107,46 +99,27 @@ export function Header({
               );
             })}
           </nav>
+          {showDevTools && (
+            <div className="mt-6 pt-4 border-t space-y-2">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground px-1">
+                Dev tools
+              </p>
+              <DevTestShopButton hasTestShop2={hasTestShop2} />
+            </div>
+          )}
         </SheetContent>
       </Sheet>
 
-      <div className="flex-1 min-w-0">
-        {showSwitcher ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className="h-9 px-2 gap-2 max-w-full"
-                disabled={pending}
-                aria-label="Switch barbershop"
-              >
-                <span className="truncate text-sm font-medium">{shopName}</span>
-                <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuLabel>Your shops</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {memberships.map((m) => (
-                <DropdownMenuItem
-                  key={m.barbershop.id}
-                  onClick={() => handleSwitchShop(m.barbershop.id)}
-                  className="flex items-center justify-between gap-2"
-                >
-                  <span className="truncate">{m.barbershop.name}</span>
-                  {m.barbershop.id === activeShopId && (
-                    <Check className="h-4 w-4 shrink-0 text-primary" />
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          shopName && (
-            <p className="text-sm text-muted-foreground hidden sm:block truncate">{shopName}</p>
-          )
-        )}
+      <div className="flex-1 min-w-0 lg:hidden">
+        <ShopSwitcher
+          shopName={shopName}
+          memberships={memberships}
+          activeShopId={activeShopId}
+          variant="header"
+        />
       </div>
+
+      <div className="flex-1 min-w-0 hidden lg:block" aria-hidden="true" />
 
       <Button
         variant="ghost"
