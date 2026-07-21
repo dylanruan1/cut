@@ -7,6 +7,7 @@ const prismaMock = vi.hoisted(() => ({
     findFirst: vi.fn(),
     findMany: vi.fn(),
     findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
   },
@@ -802,6 +803,21 @@ describe("data isolation between shops", () => {
       },
     ]);
     prismaMock.barber.findFirst.mockResolvedValue(null);
+    prismaMock.barbershop.findUniqueOrThrow.mockResolvedValue({
+      id: "shop_test2",
+      name: "Test Shop 2",
+      plan: "NONE",
+      subscriptionStatus: "NONE",
+      trialEndsAt: null,
+      twilioPhone: null,
+      phoneSetupMethod: null,
+      phoneSetupStatus: "NOT_STARTED",
+      phonePortingNotes: null,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      stripePriceId: null,
+      currentPeriodEnd: null,
+    });
     prismaMock.barbershop.update.mockResolvedValue({
       ...testShop2,
       twilioPhone: null,
@@ -827,7 +843,11 @@ describe("data isolation between shops", () => {
     );
     const updateData = prismaMock.barbershop.update.mock.calls[0]?.[0]?.data;
     expect(updateData?.timezone).toBe("America/Chicago");
-    expect(updateData?.twilioPhone).toBeNull();
+    // Phone fields omitted when shop lacks AI plan — general settings still update.
+    expect(updateData).toMatchObject({
+      name: "Test Shop 2",
+      timezone: "America/Chicago",
+    });
   });
 
   it("shop A data never appears in shop B queries", () => {

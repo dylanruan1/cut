@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, canManageShop } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { isDevelopmentEnvironment, DEV_TEST_SHOP_2_NAME } from "@/lib/shop-constants";
@@ -19,6 +19,7 @@ export default async function AppLayout({
   const hasTestShop2 = user?.memberships.some(
     (m) => m.barbershop.name === DEV_TEST_SHOP_2_NAME
   );
+  const showBilling = user ? canManageShop(user.role) : false;
 
   return (
     <div className="flex min-h-screen">
@@ -28,6 +29,7 @@ export default async function AppLayout({
         activeShopId={user?.barbershopId}
         showDevTools={showDevTools}
         hasTestShop2={hasTestShop2}
+        showBilling={showBilling}
       />
       <div className="flex-1 flex flex-col min-w-0">
         <Header
@@ -38,6 +40,7 @@ export default async function AppLayout({
           activeShopId={user?.barbershopId}
           showDevTools={showDevTools}
           hasTestShop2={hasTestShop2}
+          showBilling={showBilling}
         />
         <main className="flex-1 p-4 lg:p-6 overflow-auto">{children}</main>
       </div>

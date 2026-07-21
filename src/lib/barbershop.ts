@@ -10,6 +10,7 @@ import {
   DEV_TEST_SHOP_2_NAME,
   isDevelopmentEnvironment,
 } from "@/lib/shop-constants";
+import { defaultTrialEndsAt } from "@/lib/subscription";
 
 export {
   ACTIVE_SHOP_COOKIE,
@@ -113,6 +114,18 @@ export type CreateShopInput = {
   twilioPhone?: string | null;
   /** When false, adds membership without switching the user's active shop. Default true. */
   setAsActive?: boolean;
+  /** Optional starting services; defaults to DEFAULT_SERVICES when omitted. */
+  startingServices?: Array<{
+    name: string;
+    description?: string;
+    duration: number;
+    price: number;
+    color?: string;
+  }>;
+  /** Override owner barber display name (defaults to ownerName). */
+  firstBarberName?: string | null;
+  /** Grant a Starter trial on create (default true for primary onboarding). */
+  startTrial?: boolean;
 };
 
 /**
@@ -128,6 +141,12 @@ export async function createBarbershopWithOwner(
   const twilioPhone = input.twilioPhone
     ? normalizePhone(input.twilioPhone)
     : undefined;
+  const servicesToCreate =
+    input.startingServices && input.startingServices.length > 0
+      ? input.startingServices
+      : DEFAULT_SERVICES;
+  const startTrial = input.startTrial !== false && input.setAsActive !== false;
+  const barberName = input.firstBarberName?.trim() || input.ownerName;
 
   const barbershop = await prisma.barbershop.create({
     data: {
@@ -137,6 +156,16 @@ export async function createBarbershopWithOwner(
       phone: input.phone?.trim() || null,
       address: input.address?.trim() || null,
       twilioPhone: twilioPhone || null,
+      ...(startTrial
+        ? {
+            plan: "STARTER" as const,
+            subscriptionStatus: "TRIALING" as const,
+            trialEndsAt: defaultTrialEndsAt(14),
+          }
+        : {
+            plan: "NONE" as const,
+            subscriptionStatus: "NONE" as const,
+          }),
       businessHours: {
         create: Array.from({ length: 7 }, (_, i) => ({
           dayOfWeek: i,
@@ -146,12 +175,12 @@ export async function createBarbershopWithOwner(
         })),
       },
       services: {
-        create: DEFAULT_SERVICES.map((s, i) => ({
+        create: servicesToCreate.map((s, i) => ({
           name: s.name,
-          description: s.description,
+          description: s.description ?? null,
           duration: s.duration,
           price: s.price,
-          color: s.color,
+          color: s.color ?? "#007AFF",
           sortOrder: i,
         })),
       },
@@ -199,7 +228,7 @@ export async function createBarbershopWithOwner(
     data: {
       barbershopId: barbershop.id,
       userId: ownerBarberUserId,
-      name: input.ownerName,
+      name: barberName,
       email: input.ownerEmail,
       color: "#007AFF",
       workingHours: {
@@ -277,6 +306,7 @@ export async function createDevTestShop2ForUser(user: {
     ownerUserId: user.id,
     ownerName: user.name ?? user.email.split("@")[0],
     ownerEmail: user.email,
+    startTrial: false,
   });
 
   return { shop, created: true };

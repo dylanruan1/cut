@@ -297,9 +297,43 @@ export async function updateShopSettings(data: unknown) {
   const parsed = shopSettingsSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message };
 
+  const existing = await prisma.barbershop.findUniqueOrThrow({
+    where: { id: user.barbershopId },
+    select: {
+      id: true,
+      name: true,
+      plan: true,
+      subscriptionStatus: true,
+      trialEndsAt: true,
+      twilioPhone: true,
+      phoneSetupMethod: true,
+      phoneSetupStatus: true,
+      phonePortingNotes: true,
+      stripeCustomerId: true,
+      stripeSubscriptionId: true,
+      stripePriceId: true,
+      currentPeriodEnd: true,
+    },
+  });
+
   const twilioPhone = parsed.data.twilioPhone?.trim()
     ? normalizePhone(parsed.data.twilioPhone)
     : null;
+
+  const phoneFieldsChanged =
+    twilioPhone !== (existing.twilioPhone ?? null) ||
+    (parsed.data.phoneSetupMethod ?? null) !== (existing.phoneSetupMethod ?? null) ||
+    (parsed.data.phoneSetupStatus ?? undefined) !== undefined ||
+    (parsed.data.phonePortingNotes?.trim() || null) !==
+      (existing.phonePortingNotes ?? null);
+
+  const { canUseAiReceptionist } = await import("@/lib/subscription");
+  if (phoneFieldsChanged && !canUseAiReceptionist(existing)) {
+    return {
+      error:
+        "AI Receptionist phone setup requires the AI Receptionist plan. Upgrade to connect a Twilio number.",
+    };
+  }
 
   let phoneSetupStatus = parsed.data.phoneSetupStatus;
   if (!phoneSetupStatus) {
@@ -318,10 +352,14 @@ export async function updateShopSettings(data: unknown) {
       phone: parsed.data.phone || null,
       instagram: parsed.data.instagram || null,
       timezone: parsed.data.timezone,
-      twilioPhone,
-      phoneSetupMethod: parsed.data.phoneSetupMethod ?? null,
-      phoneSetupStatus,
-      phonePortingNotes: parsed.data.phonePortingNotes?.trim() || null,
+      ...(canUseAiReceptionist(existing)
+        ? {
+            twilioPhone,
+            phoneSetupMethod: parsed.data.phoneSetupMethod ?? null,
+            phoneSetupStatus,
+            phonePortingNotes: parsed.data.phonePortingNotes?.trim() || null,
+          }
+        : {}),
     },
   });
 
@@ -332,6 +370,25 @@ export async function updateShopSettings(data: unknown) {
 export async function inviteTeamMember(data: unknown) {
   const user = await requireShopUser();
   if (!canManageShop(user.role)) return { error: "Unauthorized" };
+
+  const shop = await prisma.barbershop.findUniqueOrThrow({
+    where: { id: user.barbershopId },
+    select: {
+      id: true,
+      name: true,
+      plan: true,
+      subscriptionStatus: true,
+      trialEndsAt: true,
+      stripeCustomerId: true,
+      stripeSubscriptionId: true,
+      stripePriceId: true,
+      currentPeriodEnd: true,
+    },
+  });
+  const { canUseTeam } = await import("@/lib/subscription");
+  if (!canUseTeam(shop)) {
+    return { error: "Team management requires the Pro plan or higher." };
+  }
 
   const parsed = inviteSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message };

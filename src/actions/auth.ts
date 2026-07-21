@@ -7,12 +7,36 @@ import {
   loginSchema,
   forgotPasswordSchema,
   onboardingSchema,
+  magicLinkSchema,
 } from "@/lib/validators";
 import { createBarbershopWithOwner, createDevTestShop2ForUser } from "@/lib/barbershop";
+import { DEFAULT_SERVICES } from "@/lib/dates";
 import { UserRole } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireUser, switchActiveBarbershop } from "@/lib/auth";
+import { getCurrentUser, requireUser, switchActiveBarbershop } from "@/lib/auth";
+
+function appUrl() {
+  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
+}
+
+/** Resolve where a user should land after auth. */
+export async function resolvePostAuthRedirect(
+  preferred?: string | null
+): Promise<string> {
+  const user = await getCurrentUser();
+  if (!user) return "/login";
+  if (!user.barbershopId || user.memberships.length === 0) {
+    return "/onboarding";
+  }
+  if (preferred && preferred.startsWith("/") && !preferred.startsWith("//")) {
+    if (preferred.startsWith("/login") || preferred.startsWith("/signup")) {
+      return "/dashboard";
+    }
+    return preferred;
+  }
+  return "/dashboard";
+}
 
 export async function signUp(formData: FormData) {
   const raw = {
@@ -34,7 +58,7 @@ export async function signUp(formData: FormData) {
     password,
     options: {
       data: { name },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+      emailRedirectTo: `${appUrl()}/auth/callback?next=/onboarding`,
     },
   });
 
@@ -46,19 +70,26 @@ export async function signUp(formData: FormData) {
     return { error: "Failed to create account" };
   }
 
-  // Account only — shop is created during onboarding.
-  await prisma.user.create({
-    data: {
+  await prisma.user.upsert({
+    where: { id: authData.user.id },
+    create: {
       id: authData.user.id,
       email,
       name,
       role: UserRole.OWNER,
       barbershopId: null,
     },
+    update: { email, name },
   });
 
   return { success: true, message: "Check your email to verify your account" };
 }
+
+const SERVICE_PRESETS = {
+  haircut: DEFAULT_SERVICES.find((s) => s.name === "Haircut")!,
+  beard: DEFAULT_SERVICES.find((s) => s.name === "Beard Trim")!,
+  lineup: DEFAULT_SERVICES.find((s) => s.name === "Line Up")!,
+};
 
 export async function completeOnboarding(formData: FormData) {
   const user = await requireUser();
@@ -67,9 +98,15 @@ export async function completeOnboarding(formData: FormData) {
     redirect("/dashboard");
   }
 
+  const selectedServices = formData.getAll("services").map(String);
   const raw = {
     shopName: formData.get("shopName") as string,
     timezone: (formData.get("timezone") as string) || "America/Los_Angeles",
+    address: (formData.get("address") as string) || undefined,
+    phone: (formData.get("phone") as string) || undefined,
+    firstBarberName: (formData.get("firstBarberName") as string) || undefined,
+    services: selectedServices.length > 0 ? selectedServices : ["haircut", "beard", "lineup"],
+    customServiceName: (formData.get("customServiceName") as string) || undefined,
   };
 
   const parsed = onboardingSchema.safeParse(raw);
@@ -77,12 +114,45 @@ export async function completeOnboarding(formData: FormData) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input" };
   }
 
+  const startingServices = parsed.data.services.flatMap((key) => {
+    if (key === "custom") {
+      const name = parsed.data.customServiceName?.trim() || "Custom service";
+      return [
+        {
+          name,
+          description: "Custom service",
+          duration: 30,
+          price: 40,
+          color: "#5AC8FA",
+        },
+      ];
+    }
+    const preset = SERVICE_PRESETS[key];
+    return preset
+      ? [
+          {
+            name: preset.name,
+            description: preset.description,
+            duration: preset.duration,
+            price: preset.price,
+            color: preset.color,
+          },
+        ]
+      : [];
+  });
+
   await createBarbershopWithOwner({
     name: parsed.data.shopName,
     timezone: parsed.data.timezone,
+    address: parsed.data.address,
+    phone: parsed.data.phone,
     ownerUserId: user.id,
     ownerName: user.name ?? user.email.split("@")[0],
     ownerEmail: user.email,
+    firstBarberName: parsed.data.firstBarberName,
+    startingServices:
+      startingServices.length > 0 ? startingServices : undefined,
+    startTrial: true,
   });
 
   revalidatePath("/");
@@ -128,7 +198,66 @@ export async function signIn(formData: FormData) {
     return { error: error.message };
   }
 
-  return { success: true };
+  const redirectTo = await resolvePostAuthRedirect(
+    (formData.get("redirect") as string) || "/dashboard"
+  );
+
+  return { success: true as const, redirectTo };
+}
+
+export async function signInWithMagicLink(formData: FormData) {
+  const parsed = magicLinkSchema.safeParse({
+    email: formData.get("email") as string,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.errors[0]?.message ?? "Invalid email" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithOtp({
+    email: parsed.data.email,
+    options: {
+      emailRedirectTo: `${appUrl()}/auth/callback?next=/dashboard`,
+    },
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return {
+    success: true as const,
+    message: "Check your email for a magic link to sign in.",
+  };
+}
+
+export async function signInWithOAuth(provider: "google") {
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${appUrl()}/auth/callback?next=/dashboard`,
+    },
+  });
+
+  if (error) {
+    return {
+      error:
+        error.message.includes("provider is not enabled") ||
+        error.message.toLowerCase().includes("not enabled")
+          ? "Google sign-in is not configured yet. Enable the Google provider in your Supabase Auth settings, then try again."
+          : error.message,
+    };
+  }
+
+  if (!data.url) {
+    return {
+      error:
+        "Google sign-in is not configured yet. Enable the Google provider in your Supabase Auth settings.",
+    };
+  }
+
+  return { url: data.url };
 }
 
 export async function forgotPassword(formData: FormData) {
@@ -140,7 +269,7 @@ export async function forgotPassword(formData: FormData) {
 
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
+    redirectTo: `${appUrl()}/reset-password`,
   });
 
   if (error) {

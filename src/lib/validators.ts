@@ -14,6 +14,18 @@ export const signupSchema = z.object({
 export const onboardingSchema = z.object({
   shopName: z.string().min(2, "Shop name must be at least 2 characters"),
   timezone: z.string().min(1, "Timezone is required").default("America/Los_Angeles"),
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  firstBarberName: z.string().optional(),
+  services: z
+    .array(z.enum(["haircut", "beard", "lineup", "custom"]))
+    .min(1, "Select at least one starting service")
+    .default(["haircut", "beard", "lineup"]),
+  customServiceName: z.string().optional(),
+});
+
+export const magicLinkSchema = z.object({
+  email: z.string().email("Please enter a valid email"),
 });
 
 export const forgotPasswordSchema = z.object({

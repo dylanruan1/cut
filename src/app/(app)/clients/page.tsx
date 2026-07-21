@@ -1,5 +1,7 @@
+import { requireActiveSubscription } from "@/lib/subscription-guards";
 import { ClientSearch } from "@/components/clients/client-search";
 
-export default function ClientsPage() {
+export default async function ClientsPage() {
+  await requireActiveSubscription();
   return <ClientSearch />;
 }

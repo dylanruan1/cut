@@ -23,6 +23,11 @@ import {
   UNCONNECTED_NUMBER_MESSAGE,
 } from "@/lib/ai-receptionist/shop-resolve";
 import { isReceptionistGreeting } from "@/lib/ai-receptionist/prompts";
+import {
+  AI_INACTIVE_VOICE_MESSAGE,
+  canUseAiReceptionist,
+} from "@/lib/subscription";
+import prisma from "@/lib/db";
 
 function appBaseUrl(request: NextRequest): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
@@ -64,6 +69,24 @@ export async function POST(request: NextRequest) {
     if (!shop) {
       console.warn("[twilio/voice/process] unmatched To number", { to });
       return twimlXml(twimlSay(UNCONNECTED_NUMBER_MESSAGE));
+    }
+
+    const subscription = await prisma.barbershop.findUnique({
+      where: { id: shop.id },
+      select: {
+        id: true,
+        name: true,
+        plan: true,
+        subscriptionStatus: true,
+        trialEndsAt: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        stripePriceId: true,
+        currentPeriodEnd: true,
+      },
+    });
+    if (!subscription || !canUseAiReceptionist(subscription)) {
+      return twimlXml(twimlSay(AI_INACTIVE_VOICE_MESSAGE));
     }
 
     const callerPhone = from ? normalizePhone(from) : "+10000000000";

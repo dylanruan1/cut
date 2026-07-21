@@ -55,6 +55,22 @@ enum PhoneSetupStatus {
   ERROR
 }
 
+enum ShopPlan {
+  NONE
+  STARTER
+  PRO
+  AI_RECEPTIONIST
+}
+
+enum SubscriptionStatus {
+  NONE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
 model Barbershop {
   id          String   @id @default(cuid())
   name        String
@@ -69,6 +85,16 @@ model Barbershop {
   phoneSetupMethod PhoneSetupMethod?
   phoneSetupStatus PhoneSetupStatus @default(NOT_STARTED)
   phonePortingNotes String?
+
+  /// SaaS plan for this shop. Defaults to NONE until checkout/trial.
+  plan                 ShopPlan           @default(NONE)
+  subscriptionStatus   SubscriptionStatus @default(NONE)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  trialEndsAt          DateTime?
+  currentPeriodEnd     DateTime?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

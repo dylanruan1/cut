@@ -13,6 +13,11 @@ import {
   resolveShopForTwilioTo,
   UNCONNECTED_NUMBER_MESSAGE,
 } from "@/lib/ai-receptionist/shop-resolve";
+import {
+  AI_INACTIVE_VOICE_MESSAGE,
+  canUseAiReceptionist,
+} from "@/lib/subscription";
+import prisma from "@/lib/db";
 
 /**
  * Twilio Voice webhook — AI receptionist entry point.
@@ -34,6 +39,33 @@ export async function POST(request: NextRequest) {
       console.warn("[twilio/voice] rejecting unmatched To number", { to, unmatched });
       return new NextResponse(
         generateTwimlResponse(twimlSay(UNCONNECTED_NUMBER_MESSAGE)),
+        { headers: { "Content-Type": "text/xml" } }
+      );
+    }
+
+    const subscription = await prisma.barbershop.findUnique({
+      where: { id: shop.id },
+      select: {
+        id: true,
+        name: true,
+        plan: true,
+        subscriptionStatus: true,
+        trialEndsAt: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        stripePriceId: true,
+        currentPeriodEnd: true,
+      },
+    });
+
+    if (!subscription || !canUseAiReceptionist(subscription)) {
+      console.warn("[twilio/voice] AI receptionist inactive for shop", {
+        shopId: shop.id,
+        plan: subscription?.plan,
+        status: subscription?.subscriptionStatus,
+      });
+      return new NextResponse(
+        generateTwimlResponse(twimlSay(AI_INACTIVE_VOICE_MESSAGE)),
         { headers: { "Content-Type": "text/xml" } }
       );
     }

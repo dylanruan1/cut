@@ -10,6 +10,8 @@ import { updateShopSettings } from "@/actions/appointments";
 import { toast } from "@/hooks/use-toast";
 import { DAYS_OF_WEEK } from "@/lib/dates";
 import { getVoiceWebhookUrl } from "@/lib/voice-webhook";
+import Link from "next/link";
+import { Lock, Sparkles } from "lucide-react";
 
 type PhoneSetupMethod = "NEW_TWILIO" | "FORWARD_EXISTING" | "PORT_TO_TWILIO";
 type PhoneSetupStatus = "NOT_STARTED" | "PENDING" | "CONNECTED" | "ERROR";
@@ -41,6 +43,7 @@ interface SettingsFormProps {
   businessHours: BusinessHour[];
   canManage: boolean;
   voiceWebhookUrl?: string;
+  aiUnlocked?: boolean;
 }
 
 const TIMEZONES = [
@@ -88,6 +91,7 @@ export function SettingsForm({
   businessHours,
   canManage,
   voiceWebhookUrl,
+  aiUnlocked = false,
 }: SettingsFormProps) {
   const [loading, setLoading] = useState(false);
   const [phoneLoading, setPhoneLoading] = useState(false);
@@ -219,6 +223,28 @@ export function SettingsForm({
         </TabsContent>
 
         <TabsContent value="phone" className="mt-6">
+          {!aiUnlocked ? (
+            <Card className="border-border/60">
+              <CardHeader className="text-center space-y-3">
+                <div className="mx-auto h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Lock className="h-5 w-5 text-primary" />
+                </div>
+                <CardTitle>AI Receptionist</CardTitle>
+                <CardDescription>
+                  AI Receptionist is available on the AI Receptionist plan. Upgrade to
+                  connect a Twilio number and start booking automatically.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <Button asChild>
+                  <Link href="/pricing?plan=AI_RECEPTIONIST&reason=upgrade">
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Upgrade to AI Receptionist
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
           <Card>
             <CardHeader>
               <CardTitle>AI Receptionist Phone Setup</CardTitle>
@@ -368,6 +394,7 @@ export function SettingsForm({
               </form>
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="hours" className="mt-6">

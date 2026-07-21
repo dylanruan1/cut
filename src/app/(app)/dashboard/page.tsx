@@ -1,10 +1,10 @@
-import { requireShopUser } from "@/lib/auth";
+import { requireActiveSubscription } from "@/lib/subscription-guards";
 import { getDashboardData } from "@/actions/appointments";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { formatDate } from "@/lib/dates";
 
 export default async function DashboardPage() {
-  const user = await requireShopUser();
+  const { user } = await requireActiveSubscription();
   const data = await getDashboardData();
 
   return (
@@ -14,7 +14,7 @@ export default async function DashboardPage() {
           Good {getGreeting()}, {user.name?.split(" ")[0] ?? "there"}
         </h1>
         <p className="text-muted-foreground mt-1">
-          {formatDate(new Date(), user.barbershop.timezone)}
+          {formatDate(new Date(), user.barbershop.timezone)} · {user.barbershop.name}
         </p>
       </div>
       <DashboardContent data={data} timezone={user.barbershop.timezone} />

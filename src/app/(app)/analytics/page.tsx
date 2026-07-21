@@ -1,14 +1,28 @@
-import { requireShopUser, canViewAnalytics } from "@/lib/auth";
+import { canViewAnalytics } from "@/lib/auth";
+import { requireActiveSubscription } from "@/lib/subscription-guards";
+import { canUseAnalytics } from "@/lib/subscription";
 import prisma from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FeatureLocked } from "@/components/billing/feature-locked";
 import { formatCurrency } from "@/lib/utils";
 import { BarChart3, TrendingUp, Users, Calendar } from "lucide-react";
 import { redirect } from "next/navigation";
 
 export default async function AnalyticsPage() {
-  const user = await requireShopUser();
+  const { user, shop } = await requireActiveSubscription();
   if (!canViewAnalytics(user.role)) {
     redirect("/dashboard");
+  }
+
+  if (!canUseAnalytics(shop)) {
+    return (
+      <FeatureLocked
+        feature="Analytics"
+        requiredPlan="PRO"
+        description="See revenue, popular services, and shop performance on Pro or higher."
+        ctaLabel="Upgrade to Pro"
+      />
+    );
   }
 
   const now = new Date();
@@ -43,7 +57,9 @@ export default async function AnalyticsPage() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Analytics</h1>
-        <p className="text-muted-foreground mt-1">This month&apos;s performance</p>
+        <p className="text-muted-foreground mt-1">
+          This month&apos;s performance for {shop.name}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

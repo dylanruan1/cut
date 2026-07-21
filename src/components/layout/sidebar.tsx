@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Calendar, Users, Settings, LayoutDashboard, Search, Scissors, BarChart3 } from "lucide-react";
+import { Calendar, Users, Settings, LayoutDashboard, Search, Scissors, BarChart3, CreditCard } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,6 +17,7 @@ const navItems = [
   { href: "/services", label: "Services", icon: Scissors },
   { href: "/team", label: "Team", icon: Users },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/settings/billing", label: "Billing", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -27,6 +28,7 @@ interface SidebarProps {
   activeShopId?: string | null;
   showDevTools?: boolean;
   hasTestShop2?: boolean;
+  showBilling?: boolean;
 }
 
 export function Sidebar({
@@ -36,8 +38,12 @@ export function Sidebar({
   activeShopId,
   showDevTools = false,
   hasTestShop2 = false,
+  showBilling = true,
 }: SidebarProps) {
   const pathname = usePathname();
+  const items = showBilling
+    ? navItems
+    : navItems.filter((item) => item.href !== "/settings/billing");
 
   return (
     <aside
@@ -66,8 +72,12 @@ export function Sidebar({
       </div>
 
       <nav className="flex flex-col gap-1 flex-1" role="navigation">
-        {navItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+        {items.map((item) => {
+          const isActive =
+            item.href === "/settings"
+              ? pathname === "/settings" ||
+                (pathname.startsWith("/settings/") && !pathname.startsWith("/settings/billing"))
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           return (
             <Link

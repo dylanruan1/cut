@@ -9,8 +9,10 @@ const publicRoutes = [
   "/reset-password",
   "/verify-email",
   "/invite",
+  "/pricing",
   "/api/twilio",
   "/api/health",
+  "/api/billing/webhook",
 ];
 
 const authRoutes = ["/login", "/signup", "/forgot-password"];

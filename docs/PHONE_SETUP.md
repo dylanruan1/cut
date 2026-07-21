@@ -94,9 +94,18 @@ TWILIO_PHONE_NUMBER=+1...   # optional default; per-shop routing uses barbershop
 
 Only **owners** can edit phone setup (`canManageShop`).
 
+## Plan requirement
+
+AI Phone setup and Twilio booking require the **AI Receptionist** plan (or local **Dev** shop bypass). Unpaid production shops hear:
+
+> Sorry, this barbershop's AI receptionist is not active right now.
+
+See [PAYWALL.md](./PAYWALL.md) and [BILLING.md](./BILLING.md).
+
 ## Related
 
 - [AI Receptionist overview](./AI_RECEPTIONIST.md)
+- [Paywall rules](./PAYWALL.md)
 - Voice entry: `src/app/api/twilio/voice/route.ts`
 - Shop resolve: `src/lib/ai-receptionist/shop-resolve.ts`
 - Lookup helper: `findBarbershopByTwilioTo` in `src/lib/barbershop.ts`

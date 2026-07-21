@@ -25,17 +25,26 @@ Cut. is a multi-tenant barbershop scheduling platform. Each barbershop is an iso
 
 ## Authentication Flow
 
-1. User signs up via Supabase Auth (email/password)
-2. Server action creates Barbershop, User (OWNER), Barber, default Services, and BusinessHours
-3. Supabase session stored in HTTP-only cookies via `@supabase/ssr`
-4. Middleware validates session on protected routes
-5. `getCurrentUser()` joins Supabase user with Prisma User record for role/shop context
+1. User signs up via Supabase Auth (email/password, magic link, or Google OAuth if enabled)
+2. Prisma `User` is created with `barbershopId: null` (no shop yet)
+3. `/onboarding` creates Barbershop + OWNER membership + defaults + Starter trial
+4. Supabase session stored in HTTP-only cookies via `@supabase/ssr`
+5. Middleware validates session on protected routes
+6. `getCurrentUser()` resolves active shop via cookie / memberships
+7. `requireActiveSubscription()` enforces plan access (local **Dev** shop bypasses)
+
+## Billing
+
+- Plans: `NONE` | `STARTER` | `PRO` | `AI_RECEPTIONIST`
+- Stripe Checkout + Customer Portal + webhook at `/api/billing/webhook`
+- See `docs/BILLING.md` and `docs/PAYWALL.md`
 
 ## Multi-Tenancy
 
 - Every data model includes `barbershopId`
-- All queries scoped to user's `barbershopId`
-- Role-based permissions enforced in server actions via `requireUser()` and permission helpers
+- All queries scoped to user's active `barbershopId`
+- Multi-shop via `BarbershopMembership` + shop switcher
+- Role-based permissions enforced in server actions via `requireUser()` / `requireShopUser()`
 
 ## User Roles
 

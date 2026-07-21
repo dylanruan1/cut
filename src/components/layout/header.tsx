@@ -32,6 +32,7 @@ interface HeaderProps {
   activeShopId?: string | null;
   showDevTools?: boolean;
   hasTestShop2?: boolean;
+  showBilling?: boolean;
 }
 
 export function Header({
@@ -43,10 +44,14 @@ export function Header({
   activeShopId,
   showDevTools = false,
   hasTestShop2 = false,
+  showBilling = true,
 }: HeaderProps) {
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
+  const mobileNav = showBilling
+    ? navItems
+    : navItems.filter((item) => item.href !== "/settings/billing");
 
   async function handleLogout() {
     const supabase = createClient();
@@ -79,9 +84,14 @@ export function Header({
             />
           </div>
           <nav className="flex flex-col gap-1">
-            {navItems.map((item) => {
+            {mobileNav.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname.startsWith(item.href);
+              const isActive =
+                item.href === "/settings"
+                  ? pathname === "/settings" ||
+                    (pathname.startsWith("/settings/") &&
+                      !pathname.startsWith("/settings/billing"))
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link
                   key={item.href}

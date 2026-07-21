@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Scissors } from "lucide-react";
+import { Loader2, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,8 +26,16 @@ const TIMEZONES = [
   "Pacific/Honolulu",
 ];
 
+const SERVICE_OPTIONS = [
+  { id: "haircut", label: "Haircut" },
+  { id: "beard", label: "Beard trim" },
+  { id: "lineup", label: "Lineup" },
+  { id: "custom", label: "Custom service" },
+] as const;
+
 export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
+  const [includeCustom, setIncludeCustom] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -42,26 +50,27 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-md animate-fade-in">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background">
+      <div className="w-full max-w-lg animate-fade-in">
         <div className="flex justify-center mb-8">
           <Link href="/" className="flex items-center gap-2">
             <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
               <Scissors className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-2xl font-semibold">Cut.</span>
+            <span className="text-2xl font-semibold tracking-tight">Cut.</span>
           </Link>
         </div>
 
-        <Card>
+        <Card className="border-border/60 shadow-soft">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Set up your shop</CardTitle>
+            <CardTitle className="text-2xl tracking-tight">Set up your shop</CardTitle>
             <CardDescription>
-              Tell us about your barbershop to start scheduling
+              Create your barbershop profile. You&apos;ll get a Starter trial so you can
+              start scheduling right away.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="shopName">Barbershop name</Label>
                 <Input
@@ -88,10 +97,63 @@ export default function OnboardingPage() {
                   ))}
                 </select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Address (optional)</Label>
+                <Input id="address" name="address" placeholder="123 Main St" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Business phone (optional)</Label>
+                <Input id="phone" name="phone" type="tel" placeholder="+1 555 0100" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="firstBarberName">First barber name (optional)</Label>
+                <Input
+                  id="firstBarberName"
+                  name="firstBarberName"
+                  placeholder="Defaults to your name"
+                />
+              </div>
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-medium">Starting services</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {SERVICE_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.id}
+                      className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2.5 text-sm cursor-pointer hover:bg-muted/40"
+                    >
+                      <input
+                        type="checkbox"
+                        name="services"
+                        value={opt.id}
+                        defaultChecked={opt.id !== "custom"}
+                        onChange={(e) => {
+                          if (opt.id === "custom") setIncludeCustom(e.target.checked);
+                        }}
+                        className="rounded border-input"
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+                {includeCustom && (
+                  <Input
+                    name="customServiceName"
+                    placeholder="Custom service name"
+                    defaultValue="Hot towel shave"
+                  />
+                )}
+              </fieldset>
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating shop..." : "Continue to dashboard"}
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating shop…
+                  </>
+                ) : (
+                  "Continue to dashboard"
+                )}
               </Button>
             </CardFooter>
           </form>

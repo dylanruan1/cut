@@ -1,10 +1,24 @@
-import { requireShopUser, canManageShop } from "@/lib/auth";
+import { canManageShop } from "@/lib/auth";
+import { requireActiveSubscription } from "@/lib/subscription-guards";
+import { canUseTeam } from "@/lib/subscription";
 import prisma from "@/lib/db";
 import { TeamManager } from "@/components/team/team-manager";
+import { FeatureLocked } from "@/components/billing/feature-locked";
 import { serializeForClient } from "@/lib/serializers";
 
 export default async function TeamPage() {
-  const user = await requireShopUser();
+  const { user, shop } = await requireActiveSubscription();
+
+  if (!canUseTeam(shop)) {
+    return (
+      <FeatureLocked
+        feature="Team management"
+        requiredPlan="PRO"
+        description="Invite barbers and manage your team on the Pro plan or higher."
+        ctaLabel="Upgrade to Pro"
+      />
+    );
+  }
 
   const [barbers, invitations] = await Promise.all([
     prisma.barber.findMany({

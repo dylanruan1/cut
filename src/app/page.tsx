@@ -15,6 +15,9 @@ export default function HomePage() {
           </Link>
           <nav className="flex items-center gap-3">
             <Button variant="ghost" asChild>
+              <Link href="/pricing">Pricing</Link>
+            </Button>
+            <Button variant="ghost" asChild>
               <Link href="/login">Sign in</Link>
             </Button>
             <Button asChild>
@@ -27,18 +30,20 @@ export default function HomePage() {
       <main>
         <section className="container mx-auto px-4 py-24 text-center animate-fade-in">
           <h1 className="text-5xl md:text-7xl font-semibold tracking-tight text-balance max-w-4xl mx-auto">
-            Scheduling for barbershops,{" "}
-            <span className="text-primary">reimagined.</span>
+            Never miss another booking.
           </h1>
           <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-balance">
-            A beautiful, fast scheduling platform built for modern barbershops.
-            Manage appointments, team, and clients — all in one place.
+            Let customers call naturally and get booked automatically. Built for
+            barbershops that want fewer missed calls and more appointments.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" asChild>
-              <Link href="/signup">Start free trial</Link>
+              <Link href="/signup">Set up your shop</Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
+              <Link href="/pricing">Upgrade to AI Receptionist</Link>
+            </Button>
+            <Button size="lg" variant="ghost" asChild>
               <Link href="/login">Sign in</Link>
             </Button>
           </div>

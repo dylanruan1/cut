@@ -1,10 +1,10 @@
-import { requireShopUser } from "@/lib/auth";
+import { requireActiveSubscription } from "@/lib/subscription-guards";
 import prisma from "@/lib/db";
 import { CalendarView } from "@/components/calendar/calendar-view";
 import { serializeForClient } from "@/lib/serializers";
 
 export default async function CalendarPage() {
-  const user = await requireShopUser();
+  const { user } = await requireActiveSubscription();
 
   const [barbers, services] = await Promise.all([
     prisma.barber.findMany({
