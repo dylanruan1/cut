@@ -18,6 +18,7 @@ import {
   canUseAiReceptionist,
 } from "@/lib/subscription";
 import prisma from "@/lib/db";
+import { assertTwilioWebhook } from "@/lib/twilio-webhook-auth";
 
 /**
  * Twilio Voice webhook — AI receptionist entry point.
@@ -27,6 +28,9 @@ import prisma from "@/lib/db";
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
+    const auth = await assertTwilioWebhook(request, formData);
+    if (!auth.ok) return auth.response;
+
     const callSid = (formData.get("CallSid") as string) || `local-${Date.now()}`;
     const from = (formData.get("From") as string) || "";
     const to = (formData.get("To") as string) || "";

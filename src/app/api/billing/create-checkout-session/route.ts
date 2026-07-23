@@ -10,6 +10,7 @@ import {
   isStripeConfigured,
 } from "@/lib/stripe";
 import { isBillablePlan } from "@/lib/subscription";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +18,15 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = rateLimit(`billing:checkout:${user.id}`, 10, 60_000);
+    if (!limited.success) {
+      return NextResponse.json(
+        { error: "Too many checkout attempts. Please wait a minute." },
+        { status: 429 }
+      );
+    }
+
     if (!user.barbershopId) {
       return NextResponse.json(
         { error: "Complete onboarding before billing" },

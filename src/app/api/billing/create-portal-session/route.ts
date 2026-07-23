@@ -2,12 +2,21 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { canManageShop, getCurrentUser } from "@/lib/auth";
 import { getAppUrl, getStripe, isStripeConfigured } from "@/lib/stripe";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST() {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const limited = rateLimit(`billing:portal:${user.id}`, 10, 60_000);
+    if (!limited.success) {
+      return NextResponse.json(
+        { error: "Too many billing requests. Please wait a minute." },
+        { status: 429 }
+      );
     }
     if (!user.barbershopId) {
       return NextResponse.json(

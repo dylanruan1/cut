@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Scissors } from "lucide-react";
@@ -28,6 +28,18 @@ export default function LoginPageInner() {
     () => searchParams.get("redirect") || "/dashboard",
     [searchParams]
   );
+  const authError = searchParams.get("error");
+
+  useEffect(() => {
+    if (authError === "auth_callback_error") {
+      toast({
+        title: "Sign-in could not be completed",
+        description:
+          "The login link may have expired or Google sign-in is not fully configured yet. Try email and password, or contact support.",
+        variant: "destructive",
+      });
+    }
+  }, [authError]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

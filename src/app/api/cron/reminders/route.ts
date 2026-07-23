@@ -6,9 +6,17 @@ import { getAppointmentClientName } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = process.env.CRON_SECRET?.trim();
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || cronSecret.startsWith("your-")) {
+    console.error("[cron/reminders] CRON_SECRET is not configured — rejecting");
+    return NextResponse.json(
+      { error: "Cron is not configured. Set CRON_SECRET." },
+      { status: 503 }
+    );
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

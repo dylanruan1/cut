@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/db";
 import { UserRole } from "@prisma/client";
+import { sanitizeInternalRedirect } from "@/lib/safe-redirect";
 
 /**
  * Auth callback for email verification, magic links, and OAuth.
@@ -10,7 +11,7 @@ import { UserRole } from "@prisma/client";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const next = sanitizeInternalRedirect(searchParams.get("next"), "/dashboard");
 
   if (code) {
     const supabase = await createClient();
@@ -40,9 +41,7 @@ export async function GET(request: Request) {
       const destination =
         !dbUser?.barbershopId && (!dbUser?.memberships || dbUser.memberships.length === 0)
           ? "/onboarding"
-          : next.startsWith("/")
-            ? next
-            : "/dashboard";
+          : next;
 
       return NextResponse.redirect(`${origin}${destination}`);
     }

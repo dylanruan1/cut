@@ -140,13 +140,33 @@ export async function updateAppointment(id: string, data: unknown) {
     return { error: "Unauthorized" };
   }
 
+  if (parsed.data.serviceId) {
+    const service = await prisma.service.findFirst({
+      where: { id: parsed.data.serviceId, barbershopId: user.barbershopId },
+    });
+    if (!service) return { error: "Service not found" };
+  }
+  if (parsed.data.barberId) {
+    const barber = await prisma.barber.findFirst({
+      where: { id: parsed.data.barberId, barbershopId: user.barbershopId },
+    });
+    if (!barber) return { error: "Barber not found" };
+    if (user.role === UserRole.BARBER && user.barberId !== parsed.data.barberId) {
+      return { error: "Unauthorized" };
+    }
+  }
+
   const updateData: Record<string, unknown> = {};
   if (parsed.data.startTime) {
     const timezone = resolveShopTimezone(user.barbershop.timezone);
     const start = parseAppointmentInputDateTime(parsed.data.startTime, timezone);
-    const duration = parsed.data.serviceId
-      ? (await prisma.service.findUnique({ where: { id: parsed.data.serviceId } }))?.duration ?? existing.duration
-      : existing.duration;
+    let duration = existing.duration;
+    if (parsed.data.serviceId) {
+      const service = await prisma.service.findFirst({
+        where: { id: parsed.data.serviceId, barbershopId: user.barbershopId },
+      });
+      duration = service?.duration ?? existing.duration;
+    }
     updateData.startTime = start;
     updateData.endTime = addMinutes(start, duration);
     updateData.duration = duration;
@@ -156,6 +176,10 @@ export async function updateAppointment(id: string, data: unknown) {
   if (parsed.data.notes !== undefined) updateData.notes = parsed.data.notes ? sanitizeInput(parsed.data.notes) : null;
   if (parsed.data.status) updateData.status = parsed.data.status;
   if (parsed.data.depositStatus) updateData.depositStatus = parsed.data.depositStatus;
+
+  if (parsed.data.clientName) {
+    updateData.clientNameSnapshot = sanitizeInput(parsed.data.clientName);
+  }
 
   const appointment = await prisma.appointment.update({
     where: { id },
@@ -254,6 +278,10 @@ export async function createService(data: unknown) {
     data: {
       barbershopId: user.barbershopId,
       ...parsed.data,
+      name: sanitizeInput(parsed.data.name),
+      description: parsed.data.description
+        ? sanitizeInput(parsed.data.description)
+        : null,
     },
   });
 
@@ -270,7 +298,13 @@ export async function updateService(id: string, data: unknown) {
 
   const service = await prisma.service.update({
     where: { id, barbershopId: user.barbershopId },
-    data: parsed.data,
+    data: {
+      ...parsed.data,
+      name: sanitizeInput(parsed.data.name),
+      description: parsed.data.description
+        ? sanitizeInput(parsed.data.description)
+        : null,
+    },
   });
 
   revalidatePath("/services");

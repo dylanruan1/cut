@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,6 +94,7 @@ export function SettingsForm({
   voiceWebhookUrl,
   aiUnlocked = false,
 }: SettingsFormProps) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [setupMethod, setSetupMethod] = useState<PhoneSetupMethod | "">(
@@ -128,6 +130,7 @@ export function SettingsForm({
       toast({ title: "Error", description: result.error, variant: "destructive" });
     } else {
       toast({ title: "Saved", description: "Settings updated successfully" });
+      router.refresh();
     }
   }
 
@@ -153,6 +156,7 @@ export function SettingsForm({
       toast({ title: "Error", description: result.error, variant: "destructive" });
     } else {
       toast({ title: "Saved", description: "Phone setup updated" });
+      router.refresh();
     }
   }
 

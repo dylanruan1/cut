@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronsUpDown, Store } from "lucide-react";
+import { Check, ChevronsUpDown, Store, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { setActiveShop } from "@/actions/auth";
@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 export type ShopMembershipOption = {
@@ -30,7 +31,6 @@ interface ShopSwitcherProps {
   shopName?: string;
   memberships?: ShopMembershipOption[];
   activeShopId?: string | null;
-  /** compact = icon + truncated name; sidebar = full-width block */
   variant?: "header" | "sidebar";
   className?: string;
 }
@@ -46,10 +46,19 @@ export function ShopSwitcher({
   const [pending, startTransition] = useTransition();
   const showSwitcher = memberships.length > 1;
 
-  function handleSwitchShop(barbershopId: string) {
+  function handleSwitchShop(barbershopId: string, name: string) {
     if (barbershopId === activeShopId) return;
     startTransition(async () => {
-      await setActiveShop(barbershopId);
+      const result = await setActiveShop(barbershopId);
+      if (result && "error" in result && result.error) {
+        toast({
+          title: "Could not switch shops",
+          description: result.error,
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Shop switched", description: `Now viewing ${name}` });
       router.refresh();
     });
   }
@@ -95,20 +104,22 @@ export function ShopSwitcher({
               <span className="block truncate text-sm font-medium">{shopName}</span>
             </span>
           </span>
-          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          {pending ? (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+          ) : (
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align={variant === "sidebar" ? "start" : "start"}
-        className="w-64"
-      >
+      <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>Your shops</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {memberships.map((m) => (
           <DropdownMenuItem
             key={m.barbershop.id}
-            onClick={() => handleSwitchShop(m.barbershop.id)}
+            onClick={() => handleSwitchShop(m.barbershop.id, m.barbershop.name)}
             className="flex items-center justify-between gap-2"
+            disabled={pending}
           >
             <span className="truncate">{m.barbershop.name}</span>
             {m.barbershop.id === activeShopId && (

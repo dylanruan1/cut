@@ -28,6 +28,7 @@ import {
   canUseAiReceptionist,
 } from "@/lib/subscription";
 import prisma from "@/lib/db";
+import { assertTwilioWebhook } from "@/lib/twilio-webhook-auth";
 
 function appBaseUrl(request: NextRequest): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
@@ -48,6 +49,9 @@ function log(label: string, data: unknown) {
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
+    const auth = await assertTwilioWebhook(request, formData);
+    if (!auth.ok) return auth.response;
+
     const callSid = (formData.get("CallSid") as string) || "";
     const speechResult =
       (formData.get("SpeechResult") as string) ||

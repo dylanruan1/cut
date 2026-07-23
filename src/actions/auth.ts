@@ -15,6 +15,8 @@ import { UserRole } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, requireUser, switchActiveBarbershop } from "@/lib/auth";
+import { sanitizeInternalRedirect } from "@/lib/safe-redirect";
+import { rateLimit } from "@/lib/rate-limit";
 
 function appUrl() {
   return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
@@ -29,13 +31,7 @@ export async function resolvePostAuthRedirect(
   if (!user.barbershopId || user.memberships.length === 0) {
     return "/onboarding";
   }
-  if (preferred && preferred.startsWith("/") && !preferred.startsWith("//")) {
-    if (preferred.startsWith("/login") || preferred.startsWith("/signup")) {
-      return "/dashboard";
-    }
-    return preferred;
-  }
-  return "/dashboard";
+  return sanitizeInternalRedirect(preferred, "/dashboard");
 }
 
 export async function signUp(formData: FormData) {
@@ -48,6 +44,11 @@ export async function signUp(formData: FormData) {
   const parsed = signupSchema.safeParse(raw);
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input" };
+  }
+
+  const limited = rateLimit(`auth:signup:${parsed.data.email.toLowerCase()}`, 5, 60_000);
+  if (!limited.success) {
+    return { error: "Too many signup attempts. Please wait a minute and try again." };
   }
 
   const { name, email, password } = parsed.data;
@@ -162,7 +163,21 @@ export async function completeOnboarding(formData: FormData) {
 export async function setActiveShop(barbershopId: string) {
   const result = await switchActiveBarbershop(barbershopId);
   if ("error" in result) return result;
-  revalidatePath("/");
+  // Bust all shop-scoped pages so stale tenant data never flashes.
+  for (const path of [
+    "/",
+    "/dashboard",
+    "/calendar",
+    "/clients",
+    "/services",
+    "/team",
+    "/analytics",
+    "/settings",
+    "/settings/billing",
+    "/pricing",
+  ]) {
+    revalidatePath(path);
+  }
   return { success: true as const };
 }
 
@@ -189,6 +204,11 @@ export async function signIn(formData: FormData) {
   const parsed = loginSchema.safeParse(raw);
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Invalid input" };
+  }
+
+  const limited = rateLimit(`auth:signin:${parsed.data.email.toLowerCase()}`, 10, 60_000);
+  if (!limited.success) {
+    return { error: "Too many sign-in attempts. Please wait a minute and try again." };
   }
 
   const supabase = await createClient();

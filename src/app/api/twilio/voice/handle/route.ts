@@ -7,6 +7,7 @@ import {
   sendSms,
   buildBookingConfirmationSms,
 } from "@/lib/twilio";
+import { assertTwilioWebhook } from "@/lib/twilio-webhook-auth";
 import { addMinutes } from "@/lib/dates";
 import { formatTime, formatShortDate } from "@/lib/dates";
 
@@ -31,6 +32,9 @@ const STEPS: Record<string, { prompt: string; field: keyof SessionData; next: st
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
+  const auth = await assertTwilioWebhook(request, formData);
+  if (!auth.ok) return auth.response;
+
   const callSid = formData.get("CallSid") as string;
   const digits = formData.get("Digits") as string | null;
   const speechResult = formData.get("SpeechResult") as string | null;

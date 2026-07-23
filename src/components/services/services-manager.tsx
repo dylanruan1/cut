@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ interface ServicesManagerProps {
 }
 
 export function ServicesManager({ services: initialServices, canManage }: ServicesManagerProps) {
+  const router = useRouter();
   const [services, setServices] = useState(initialServices);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Service | null>(null);
@@ -61,11 +63,21 @@ export function ServicesManager({ services: initialServices, canManage }: Servic
     setLoading(false);
     if (result?.error) {
       toast({ title: "Error", description: result.error, variant: "destructive" });
-    } else {
+    } else if (result?.service) {
+      const saved = result.service as Service;
+      setServices((prev) => {
+        const idx = prev.findIndex((s) => s.id === saved.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...prev[idx], ...saved };
+          return next;
+        }
+        return [...prev, { ...saved, isActive: saved.isActive ?? true }];
+      });
       toast({ title: "Success", description: editing ? "Service updated" : "Service created" });
       setDialogOpen(false);
       setEditing(null);
-      window.location.reload();
+      router.refresh();
     }
   }
 

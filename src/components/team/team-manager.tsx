@@ -21,10 +21,16 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Mail, Phone, UserMinus } from "lucide-react";
+import { Plus, Mail, Phone, UserMinus, Users } from "lucide-react";
 import { inviteTeamMember, removeBarber } from "@/actions/appointments";
 import { toast } from "@/hooks/use-toast";
 import { getInitials, formatPhone } from "@/lib/utils";
+import { EmptyState } from "@/components/shared/empty-state";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Barber {
   id: string;
@@ -98,7 +104,24 @@ export function TeamManager({ barbers, invitations, canManage }: TeamManagerProp
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {barbers.map((barber) => (
+        {barbers.length === 0 ? (
+          <div className="sm:col-span-2 lg:col-span-3">
+            <EmptyState
+              icon={Users}
+              title="No team members yet"
+              description="Invite barbers and receptionists so they can manage appointments for this shop."
+            />
+            {canManage && (
+              <div className="flex justify-center -mt-2 mb-4">
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Invite
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+        barbers.map((barber) => (
           <Card key={barber.id}>
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
@@ -123,19 +146,25 @@ export function TeamManager({ barbers, invitations, canManage }: TeamManagerProp
                 </div>
               </div>
               {canManage && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-4 text-destructive"
-                  onClick={() => handleRemove(barber.id)}
-                >
-                  <UserMinus className="h-4 w-4 mr-1" />
-                  Remove
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-4 text-destructive"
+                      onClick={() => handleRemove(barber.id)}
+                    >
+                      <UserMinus className="h-4 w-4 mr-1" />
+                      Remove
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Deactivate this barber for the active shop</TooltipContent>
+                </Tooltip>
               )}
             </CardContent>
           </Card>
-        ))}
+        ))
+        )}
       </div>
 
       {invitations.length > 0 && (
