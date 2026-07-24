@@ -56,6 +56,28 @@ stripe listen --forward-to localhost:3000/api/billing/webhook
 
 Use the printed `whsec_...` as `STRIPE_WEBHOOK_SECRET`.
 
+### Gotcha: Stripe Sandbox vs main account
+
+If `STRIPE_SECRET_KEY` comes from a Stripe **Sandbox** (its own `acct_...`), a plain
+`stripe login` authenticates the CLI to your **main** account instead, so
+`stripe listen` never receives the sandbox's events (webhooks silently 400/never
+fire) and `stripe prices list` shows nothing. Scope the listener to the sandbox by
+passing the app's key explicitly:
+
+```bash
+stripe listen --api-key "$(grep '^STRIPE_SECRET_KEY=' .env.local | cut -d= -f2)" \
+  --forward-to localhost:3000/api/billing/webhook
+```
+
+This prints a **different** `whsec_...` than the default listener — use that one as
+`STRIPE_WEBHOOK_SECRET`, or webhook signature checks fail with `400`.
+
+### Gotcha: price IDs are case-sensitive
+
+`price_1Twaj...` and `price_1TWaj...` are different objects. A wrong-case ID gives
+`No such price` / `resource_missing` on checkout. Run `npm run setup-stripe-products`
+to print the exact IDs rather than transcribing them by hand.
+
 ## What the webhook updates
 
 On the matched `Barbershop` (via `metadata.barbershopId`):

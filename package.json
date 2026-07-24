@@ -15,6 +15,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "create-test-shop-2": "npx tsx scripts/create-test-shop-2.ts",
+    "setup-stripe-products": "npx tsx scripts/setup-stripe-products.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
