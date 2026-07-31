@@ -16,9 +16,12 @@
     "db:studio": "prisma studio",
     "create-test-shop-2": "npx tsx scripts/create-test-shop-2.ts",
     "setup-stripe-products": "npx tsx scripts/setup-stripe-products.ts",
+    "test-receptionist": "npx tsx scripts/test-receptionist.ts",
+    "stress-test-receptionist": "npx tsx scripts/stress-test-receptionist.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^6.1.0",
     "@radix-ui/react-avatar": "^1.1.2",

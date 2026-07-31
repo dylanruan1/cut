@@ -146,7 +146,7 @@ export type ProcessReceptionistInput = {
   lastPrompt?: string;
 };
 
-export type ReceptionistProvider = "rules" | "openai";
+export type ReceptionistProvider = "rules" | "openai" | "claude";
 
 export const MAX_TURN_COUNT = 20;
 export const MAX_PROMPT_REPEATS = 2;

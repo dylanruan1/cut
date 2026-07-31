@@ -91,12 +91,34 @@ export { MAX_TURN_COUNT, MAX_PROMPT_REPEATS, SESSION_TTL_HOURS } from "./types";
 /**
  * Main entry point for the AI receptionist.
  * Stateless regarding persistence — callers pass merged session state in.
+ *
+ * The "claude" provider uses an LLM brain (see ./claude). If it is requested
+ * but not configured, or if a call to it fails for any reason, we fall back to
+ * the deterministic rules parser so a call is never left hanging.
  */
 export async function processReceptionistMessage(
   input: ProcessReceptionistInput,
   options?: { provider?: ReceptionistProvider }
 ): Promise<ReceptionistResponse> {
   const provider = options?.provider ?? "rules";
+
+  if (provider === "claude") {
+    const { processWithClaude, isClaudeConfigured } = await import("./claude");
+    if (isClaudeConfigured()) {
+      try {
+        return await processWithClaude(input);
+      } catch (error) {
+        console.error(
+          "[ai-receptionist] Claude provider failed; falling back to rules parser.",
+          error
+        );
+      }
+    } else {
+      console.info(
+        "[ai-receptionist] Claude provider requested but ANTHROPIC_API_KEY missing; using rules parser."
+      );
+    }
+  }
 
   if (provider === "openai") {
     console.info(
@@ -105,6 +127,15 @@ export async function processReceptionistMessage(
   }
 
   return processWithRules(input);
+}
+
+/** Resolves the receptionist provider from env, defaulting to the rules parser. */
+export function getConfiguredProvider(): ReceptionistProvider {
+  const raw = process.env.AI_RECEPTIONIST_PROVIDER?.trim().toLowerCase();
+  if (raw === "claude" || raw === "openai" || raw === "rules") {
+    return raw;
+  }
+  return "rules";
 }
 
 async function processWithRules(

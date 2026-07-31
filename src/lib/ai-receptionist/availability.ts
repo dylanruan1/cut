@@ -23,6 +23,10 @@ export type FindAvailabilityInput = {
   existingAppointments: ExistingAppointment[];
   /** How many options to return when time is flexible */
   limit?: number;
+  /** "Now" instant used to exclude slots already in the past (defaults to current time). */
+  now?: Date;
+  /** Minimum minutes of lead time before a slot can be booked (default 0). */
+  minLeadMinutes?: number;
 };
 
 /**
@@ -41,8 +45,11 @@ export function findAvailability(input: FindAvailabilityInput): AvailabilityOpti
     barberId,
     existingAppointments,
     limit = 5,
+    now = new Date(),
+    minLeadMinutes = 0,
   } = input;
 
+  const earliestStart = addMinutes(now, minLeadMinutes);
   const timezone = resolveShopTimezone(shop.timezone);
   const dayOfWeek = dayOfWeekInTimezone(preferredDate, timezone);
   const hours = shop.businessHours.find((h) => h.dayOfWeek === dayOfWeek);
@@ -70,6 +77,10 @@ export function findAvailability(input: FindAvailabilityInput): AvailabilityOpti
 
   for (const slotStart of slots) {
     const slotEnd = addMinutes(slotStart, serviceDuration);
+    // Never offer a time that has already passed (or is inside the lead window).
+    if (slotStart.getTime() < earliestStart.getTime()) {
+      continue;
+    }
     if (
       !fitsWithinHours(
         slotStart,

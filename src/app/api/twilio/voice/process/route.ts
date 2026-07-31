@@ -7,6 +7,7 @@ import {
 } from "@/lib/twilio";
 import {
   processReceptionistMessage,
+  getConfiguredProvider,
   createCallSession,
   getCallSession,
   mergeParsedRequestIntoSession,
@@ -140,15 +141,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await processReceptionistMessage({
-      text: speechResult,
-      callerPhone: session.callerPhone || callerPhone,
-      shop,
-      session: priorState,
-      turnCount,
-      promptRepeatCount: context.promptRepeatCount ?? 0,
-      lastPrompt: context.lastPrompt,
-    });
+    const response = await processReceptionistMessage(
+      {
+        text: speechResult,
+        callerPhone: session.callerPhone || callerPhone,
+        shop,
+        session: priorState,
+        conversationHistory: context.messages ?? [],
+        turnCount,
+        promptRepeatCount: context.promptRepeatCount ?? 0,
+        lastPrompt: context.lastPrompt,
+      },
+      { provider: getConfiguredProvider() }
+    );
 
     log("client_name_state", {
       callSid,
