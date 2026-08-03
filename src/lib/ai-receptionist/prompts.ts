@@ -16,7 +16,16 @@ export function getReceptionistGreeting(shopName: string): string {
  */
 export function getBilingualReceptionistGreeting(shopName: string): string {
   const name = shopName.trim() || "Cut";
-  return `Thanks for calling ${name}. I can help you book, reschedule, or cancel an appointment. Para español, solo hable en español. How can I help you today?`;
+  // The keypad option is deterministic — Twilio can only run speech recognition
+  // in one language per turn, so a Spanish first sentence heard by the English
+  // recognizer is often garbled. Pressing 2 switches reliably.
+  return `Thanks for calling ${name}. I can help you book, reschedule, or cancel an appointment. Para español, oprima el dos. How can I help you today?`;
+}
+
+/** Spoken entirely in Spanish once the caller opts into Spanish. */
+export function getSpanishReceptionistGreeting(shopName: string): string {
+  const name = shopName.trim() || "Cut";
+  return `Gracias por llamar a ${name}. Le puedo ayudar a hacer, cambiar o cancelar una cita. ¿En qué le puedo ayudar?`;
 }
 
 export function isReceptionistGreeting(speak: string): boolean {

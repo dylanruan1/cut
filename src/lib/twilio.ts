@@ -267,6 +267,30 @@ export function twimlGather(
 }
 
 /** Speech-enabled Gather for the AI receptionist voice flow. */
+/**
+ * Speech hints bias Twilio's recognizer toward vocabulary it will actually hear
+ * on a barbershop call. This measurably improves accuracy, especially for
+ * Spanish where generic models mis-hear booking terms.
+ */
+const SPEECH_HINTS: Record<VoiceLanguage, string> = {
+  en: [
+    "haircut","fade","beard trim","line up","kids cut","taper","shape up",
+    "today","tomorrow","morning","afternoon","evening","tonight",
+    "Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday",
+    "AM","PM","o'clock","thirty","any barber","appointment","book","cancel","reschedule",
+    "yes","no","that works","sounds good",
+  ].join(","),
+  es: [
+    "corte","corte de pelo","recorte","barba","recorte de barba","desvanecido",
+    "perfilado","corte de niño","cita","turno","reservar","agendar","cancelar","cambiar",
+    "hoy","mañana","pasado mañana","por la mañana","por la tarde","por la noche",
+    "lunes","martes","miércoles","jueves","viernes","sábado","domingo",
+    "de la mañana","de la tarde","de la noche","y media","en punto",
+    "cualquier barbero","me llamo","mi nombre es","sí","no","está bien","perfecto",
+    "quiero","quisiera","necesito","disponible","a qué hora","cuánto cuesta",
+  ].join(","),
+};
+
 export function twimlSpeechGather(
   action: string,
   prompt: string,
@@ -275,15 +299,19 @@ export function twimlSpeechGather(
     speechTimeout?: string;
     /** Language for both the spoken prompt and speech recognition. */
     language?: VoiceLanguage;
+    /** Announce a DTMF language switch (used on the opening greeting). */
+    offerLanguageKeypad?: boolean;
   }
 ): string {
   const timeout = options?.timeout ?? 8;
   const speechTimeout = options?.speechTimeout ?? "auto";
   const language = options?.language ?? "en";
+  const hints = SPEECH_HINTS[language] ?? SPEECH_HINTS.en;
+  // enhanced + phone_call model is materially more accurate on telephony audio.
   // actionOnEmptyResult ensures timeouts POST back to process (with empty SpeechResult)
   // instead of falling through and ending the call.
   return [
-    `<Gather input="speech dtmf" action="${escapeXml(action)}" method="POST" timeout="${timeout}" speechTimeout="${speechTimeout}" language="${speechLocaleForLanguage(language)}" actionOnEmptyResult="true">`,
+    `<Gather input="speech dtmf" action="${escapeXml(action)}" method="POST" timeout="${timeout}" speechTimeout="${speechTimeout}" language="${speechLocaleForLanguage(language)}" speechModel="phone_call" enhanced="true" hints="${escapeXml(hints)}" actionOnEmptyResult="true">`,
     twimlSay(prompt, voiceForLanguage(language)),
     `</Gather>`,
     `<Redirect method="POST">${escapeXml(action)}</Redirect>`,

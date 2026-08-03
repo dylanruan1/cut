@@ -20,6 +20,7 @@ import {
   summarizeSession,
   isContinuableSession,
   findExistingClientName,
+  getSpanishReceptionistGreeting,
   type CallSessionContext,
 } from "@/lib/ai-receptionist";
 import {
@@ -57,10 +58,9 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const callSid = (formData.get("CallSid") as string) || "";
+    const digits = ((formData.get("Digits") as string) || "").trim();
     const speechResult =
-      (formData.get("SpeechResult") as string) ||
-      (formData.get("Digits") as string) ||
-      "";
+      (formData.get("SpeechResult") as string) || digits || "";
     const from = (formData.get("From") as string) || "";
     const to = (formData.get("To") as string) || "";
     const actionUrl = processActionUrl(request);
@@ -142,6 +142,24 @@ export async function POST(request: NextRequest) {
 
     // Language sticks for the rest of the call once the caller reveals it.
     const priorLanguage = (context.language as VoiceLanguage | undefined) ?? "en";
+
+    // Pressing 2 is the deterministic Spanish switch: Twilio can only run speech
+    // recognition in one language per turn, so relying on transcribing a Spanish
+    // sentence with the English recognizer is unreliable. Re-greet in Spanish and
+    // listen in es-US from here on.
+    if (digits === "2" && priorLanguage !== "es") {
+      log("language_switch_dtmf", { callSid, to: "es" });
+      await updateCallSessionContext(callSid, context, "es");
+      return twimlXml(
+        twimlSpeechGather(
+          actionUrl,
+          getSpanishReceptionistGreeting(shop.name),
+          { language: "es" }
+        )
+      );
+    }
+
+    // Digits alone (other than the language key) carry no booking meaning.
     const language = detectSpokenLanguage(speechResult, priorLanguage);
     if (language !== priorLanguage) {
       log("language_switch", { callSid, from: priorLanguage, to: language });
@@ -362,4 +380,20 @@ function twimlXml(content: string) {
   return new NextResponse(generateTwimlResponse(content), {
     headers: { "Content-Type": "text/xml" },
   });
+}
+
+/** Persists only the chosen language onto the call session context. */
+async function updateCallSessionContext(
+  callSid: string,
+  context: CallSessionContext,
+  language: VoiceLanguage
+) {
+  try {
+    const { updateCallSession } = await import("@/lib/ai-receptionist/session");
+    await updateCallSession(callSid, {
+      context: { ...context, language },
+    });
+  } catch (error) {
+    console.warn("[twilio/voice/process] failed to persist language", error);
+  }
 }

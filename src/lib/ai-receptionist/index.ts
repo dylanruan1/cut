@@ -46,6 +46,7 @@ export {
   describeBookingForVoice,
   getReceptionistGreeting,
   getBilingualReceptionistGreeting,
+  getSpanishReceptionistGreeting,
   isReceptionistGreeting,
 } from "./prompts";
 export {
