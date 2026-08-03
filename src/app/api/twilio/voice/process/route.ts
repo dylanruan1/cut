@@ -4,6 +4,9 @@ import {
   twimlSpeechGather,
   twimlSay,
   normalizePhone,
+  detectSpokenLanguage,
+  voiceForLanguage,
+  type VoiceLanguage,
 } from "@/lib/twilio";
 import {
   processReceptionistMessage,
@@ -117,16 +120,32 @@ export async function POST(request: NextRequest) {
     log("session_before_merge", summarizeSession(session));
 
     if (!speechResult.trim()) {
+      const emptyContext = getSessionContext(session);
+      const emptyLanguage = (emptyContext.language as VoiceLanguage | undefined) ?? "en";
+      const inProgress = Boolean(session.awaitingField || emptyContext.lastPrompt);
       const prompt =
-        session.awaitingField || getSessionContext(session).lastPrompt
-          ? "Sorry, I didn't catch that. Could you say that again?"
-          : "Sorry, I didn't catch that. How can I help you today?";
-      return twimlXml(twimlSpeechGather(actionUrl, prompt));
+        emptyLanguage === "es"
+          ? inProgress
+            ? "Perdón, no escuché bien. ¿Puede repetirlo?"
+            : "Perdón, no escuché bien. ¿En qué le puedo ayudar?"
+          : inProgress
+            ? "Sorry, I didn't catch that. Could you say that again?"
+            : "Sorry, I didn't catch that. How can I help you today?";
+      return twimlXml(
+        twimlSpeechGather(actionUrl, prompt, { language: emptyLanguage })
+      );
     }
 
     const context = getSessionContext(session);
     const priorState = sessionToParsedState(session);
     const turnCount = (session.turnCount ?? context.turnCount ?? 0) + 1;
+
+    // Language sticks for the rest of the call once the caller reveals it.
+    const priorLanguage = (context.language as VoiceLanguage | undefined) ?? "en";
+    const language = detectSpokenLanguage(speechResult, priorLanguage);
+    if (language !== priorLanguage) {
+      log("language_switch", { callSid, from: priorLanguage, to: language });
+    }
 
     // Log-only lookup: a Client matched by phone is NEVER spoken, suggested,
     // or used to fill session.clientName. The receptionist always asks
@@ -210,6 +229,7 @@ export async function POST(request: NextRequest) {
 
     const nextContext: CallSessionContext = {
       ...context,
+      language,
       turnCount,
       awaitingField: response.awaitingField ?? null,
       lastPrompt: response.speak,
@@ -313,11 +333,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (response.shouldContinue) {
-      return twimlXml(twimlSpeechGather(actionUrl, response.speak));
+      return twimlXml(twimlSpeechGather(actionUrl, response.speak, { language }));
     }
 
+    const signOff =
+      language === "es"
+        ? `Gracias por llamar a ${shop.name}. ¡Que tenga buen día!`
+        : `Thanks for calling ${shop.name}. Goodbye.`;
+    const voice = voiceForLanguage(language);
     return twimlXml(
-      `${twimlSay(response.speak)}${twimlSay("Thanks for calling Cut. Goodbye.")}`
+      `${twimlSay(response.speak, voice)}${twimlSay(signOff, voice)}`
     );
   } catch (error) {
     console.error("[twilio/voice/process] error:", error);

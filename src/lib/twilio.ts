@@ -167,6 +167,92 @@ export function generateTwimlResponse(content: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><Response>${content}</Response>`;
 }
 
+/** Spoken language for the AI receptionist. */
+export type VoiceLanguage = "en" | "es";
+
+/** Neural voices per language. Spanish text needs a Spanish voice or it is mispronounced. */
+const VOICE_BY_LANGUAGE: Record<VoiceLanguage, string> = {
+  en: "Polly.Joanna",
+  es: "Polly.Lupe",
+};
+
+/** Speech-recognition locales passed to <Gather language="...">. */
+const SPEECH_LOCALE_BY_LANGUAGE: Record<VoiceLanguage, string> = {
+  en: "en-US",
+  es: "es-US",
+};
+
+export function voiceForLanguage(language: VoiceLanguage = "en"): string {
+  return VOICE_BY_LANGUAGE[language] ?? VOICE_BY_LANGUAGE.en;
+}
+
+export function speechLocaleForLanguage(language: VoiceLanguage = "en"): string {
+  return SPEECH_LOCALE_BY_LANGUAGE[language] ?? SPEECH_LOCALE_BY_LANGUAGE.en;
+}
+
+/**
+ * Heuristic language detection on a caller's transcript.
+ * Deliberately conservative: only flips to Spanish on clear Spanish signals,
+ * so an English caller is never switched by accident.
+ */
+export function detectSpokenLanguage(
+  text: string,
+  current: VoiceLanguage = "en"
+): VoiceLanguage {
+  const t = ` ${text.toLowerCase().replace(/[^\p{L}\s¿¡]/gu, " ")} `;
+  if (!t.trim()) return current;
+
+  // Accented/inverted punctuation characters are a strong Spanish signal.
+  if (/[ñáéíóúü¿¡]/i.test(text)) return "es";
+
+  const SPANISH_MARKERS = [
+    "hola",
+    "buenos",
+    "buenas",
+    "gracias",
+    "quiero",
+    "necesito",
+    "quisiera",
+    "cita",
+    "corte",
+    "pelo",
+    "barba",
+    "manana",
+    "mañana",
+    "hoy",
+    "tarde",
+    "para",
+    "por favor",
+    "cuanto",
+    "cuando",
+    "donde",
+    "si",
+    "una",
+    "puedo",
+    "tienen",
+    "disponible",
+    "nombre",
+    "me llamo",
+    "abierto",
+    "hablar",
+    "espanol",
+    "español",
+  ];
+
+  const hits = SPANISH_MARKERS.reduce(
+    (count, word) => (t.includes(` ${word} `) ? count + 1 : count),
+    0
+  );
+
+  // Two or more markers avoids false positives on shared words like "si"/"para".
+  if (hits >= 2) return "es";
+  // A single unambiguous opener is enough.
+  if (/\b(hola|buenos dias|buenas tardes|espanol|español|quisiera|necesito una cita)\b/i.test(t)) {
+    return "es";
+  }
+  return current;
+}
+
 export function twimlSay(text: string, voice = "Polly.Joanna"): string {
   return `<Say voice="${voice}">${escapeXml(text)}</Say>`;
 }
@@ -184,15 +270,21 @@ export function twimlGather(
 export function twimlSpeechGather(
   action: string,
   prompt: string,
-  options?: { timeout?: number; speechTimeout?: string }
+  options?: {
+    timeout?: number;
+    speechTimeout?: string;
+    /** Language for both the spoken prompt and speech recognition. */
+    language?: VoiceLanguage;
+  }
 ): string {
   const timeout = options?.timeout ?? 8;
   const speechTimeout = options?.speechTimeout ?? "auto";
+  const language = options?.language ?? "en";
   // actionOnEmptyResult ensures timeouts POST back to process (with empty SpeechResult)
   // instead of falling through and ending the call.
   return [
-    `<Gather input="speech dtmf" action="${escapeXml(action)}" method="POST" timeout="${timeout}" speechTimeout="${speechTimeout}" language="en-US" actionOnEmptyResult="true">`,
-    twimlSay(prompt),
+    `<Gather input="speech dtmf" action="${escapeXml(action)}" method="POST" timeout="${timeout}" speechTimeout="${speechTimeout}" language="${speechLocaleForLanguage(language)}" actionOnEmptyResult="true">`,
+    twimlSay(prompt, voiceForLanguage(language)),
     `</Gather>`,
     `<Redirect method="POST">${escapeXml(action)}</Redirect>`,
   ].join("");

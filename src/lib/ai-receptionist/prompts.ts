@@ -9,6 +9,16 @@ export function getReceptionistGreeting(shopName: string): string {
   return `Thanks for calling ${name}. I'm the AI receptionist. I can help you book, reschedule, or cancel an appointment. How can I help you today?`;
 }
 
+/**
+ * Bilingual greeting: announces the Spanish option so Spanish-speaking callers
+ * know it exists, without forcing a "press 2" menu on everyone. The caller
+ * simply answers in whichever language they prefer and the receptionist follows.
+ */
+export function getBilingualReceptionistGreeting(shopName: string): string {
+  const name = shopName.trim() || "Cut";
+  return `Thanks for calling ${name}. I can help you book, reschedule, or cancel an appointment. Para español, solo hable en español. How can I help you today?`;
+}
+
 export function isReceptionistGreeting(speak: string): boolean {
   return /^Thanks for calling .+\. I'm the AI receptionist\./i.test(speak.trim());
 }

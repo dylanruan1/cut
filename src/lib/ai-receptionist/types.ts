@@ -67,6 +67,8 @@ export type ParsedBookingRequest = {
 };
 
 export type CallSessionContext = {
+  /** Spoken language for this call ("en" | "es") — sticks once detected. */
+  language?: string;
   awaitingField?: AwaitingField;
   lastPrompt?: string;
   promptRepeatCount?: number;

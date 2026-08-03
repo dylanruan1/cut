@@ -45,6 +45,7 @@ export {
   LOOP_RECOVERY_PROMPT,
   describeBookingForVoice,
   getReceptionistGreeting,
+  getBilingualReceptionistGreeting,
   isReceptionistGreeting,
 } from "./prompts";
 export {

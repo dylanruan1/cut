@@ -7,6 +7,7 @@ import {
 } from "@/lib/twilio";
 import {
   getReceptionistGreeting,
+  getBilingualReceptionistGreeting,
   createCallSession,
 } from "@/lib/ai-receptionist";
 import {
@@ -76,9 +77,12 @@ export async function POST(request: NextRequest) {
 
     await ensureReceptionistSession(callSid, from, shop.id);
 
-    const greeting = getReceptionistGreeting(shop.name);
+    // Bilingual greeting announces the Spanish option without a phone-tree menu.
+    const greeting = getBilingualReceptionistGreeting(shop.name);
     const twiml = generateTwimlResponse(
-      twimlSpeechGather(`${baseUrl}/api/twilio/voice/process`, greeting)
+      twimlSpeechGather(`${baseUrl}/api/twilio/voice/process`, greeting, {
+        language: "en",
+      })
     );
 
     return new NextResponse(twiml, {
