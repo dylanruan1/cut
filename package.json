@@ -18,6 +18,7 @@
     "setup-stripe-products": "npx tsx scripts/setup-stripe-products.ts",
     "test-receptionist": "npx tsx scripts/test-receptionist.ts",
     "stress-test-receptionist": "npx tsx scripts/stress-test-receptionist.ts",
+    "simulate-call": "npx tsx scripts/simulate-call.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
