@@ -22,6 +22,25 @@ export function getBilingualReceptionistGreeting(shopName: string): string {
   return `Thanks for calling ${name}. I can help you book, reschedule, or cancel an appointment. Para español, oprima el dos. How can I help you today?`;
 }
 
+/**
+ * Bilingual greeting split by language so each sentence is spoken by a native
+ * voice. Speaking the Spanish line with an English voice mangles the
+ * pronunciation, so the Spanish prompt gets a Spanish voice.
+ */
+export function getBilingualGreetingSegments(
+  shopName: string
+): Array<{ text: string; language: "en" | "es" }> {
+  const name = shopName.trim() || "Cut";
+  return [
+    {
+      text: `Thanks for calling ${name}. I can help you book, reschedule, or cancel an appointment.`,
+      language: "en",
+    },
+    { text: `Para español, oprima el dos.`, language: "es" },
+    { text: `How can I help you today?`, language: "en" },
+  ];
+}
+
 /** Spoken entirely in Spanish once the caller opts into Spanish. */
 export function getSpanishReceptionistGreeting(shopName: string): string {
   const name = shopName.trim() || "Cut";

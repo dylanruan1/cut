@@ -291,28 +291,37 @@ const SPEECH_HINTS: Record<VoiceLanguage, string> = {
   ].join(","),
 };
 
+/** A chunk of speech rendered with its own language's native voice. */
+export type SpeechSegment = { text: string; language: VoiceLanguage };
+
 export function twimlSpeechGather(
   action: string,
-  prompt: string,
+  prompt: string | SpeechSegment[],
   options?: {
     timeout?: number;
     speechTimeout?: string;
     /** Language for both the spoken prompt and speech recognition. */
     language?: VoiceLanguage;
-    /** Announce a DTMF language switch (used on the opening greeting). */
-    offerLanguageKeypad?: boolean;
   }
 ): string {
   const timeout = options?.timeout ?? 8;
   const speechTimeout = options?.speechTimeout ?? "auto";
   const language = options?.language ?? "en";
   const hints = SPEECH_HINTS[language] ?? SPEECH_HINTS.en;
+  // Each segment is spoken by the native voice for its own language, so a
+  // Spanish sentence is never mispronounced by an English voice.
+  const saySegments = Array.isArray(prompt)
+    ? prompt
+        .filter((s) => s.text.trim())
+        .map((s) => twimlSay(s.text, voiceForLanguage(s.language)))
+        .join("")
+    : twimlSay(prompt, voiceForLanguage(language));
   // enhanced + phone_call model is materially more accurate on telephony audio.
   // actionOnEmptyResult ensures timeouts POST back to process (with empty SpeechResult)
   // instead of falling through and ending the call.
   return [
     `<Gather input="speech dtmf" action="${escapeXml(action)}" method="POST" timeout="${timeout}" speechTimeout="${speechTimeout}" language="${speechLocaleForLanguage(language)}" speechModel="phone_call" enhanced="true" hints="${escapeXml(hints)}" actionOnEmptyResult="true">`,
-    twimlSay(prompt, voiceForLanguage(language)),
+    saySegments,
     `</Gather>`,
     `<Redirect method="POST">${escapeXml(action)}</Redirect>`,
   ].join("");
