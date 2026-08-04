@@ -170,10 +170,15 @@ export function generateTwimlResponse(content: string): string {
 /** Spoken language for the AI receptionist. */
 export type VoiceLanguage = "en" | "es";
 
-/** Neural voices per language. Spanish text needs a Spanish voice or it is mispronounced. */
+/**
+ * Neural Polly voices. The "-Neural" suffix matters a lot: standard Polly
+ * voices sound noticeably robotic, while the neural models are far more
+ * natural. Spanish text also needs a Spanish voice or it is mispronounced.
+ * Override per-deployment with RECEPTIONIST_VOICE_EN / RECEPTIONIST_VOICE_ES.
+ */
 const VOICE_BY_LANGUAGE: Record<VoiceLanguage, string> = {
-  en: "Polly.Joanna",
-  es: "Polly.Lupe",
+  en: "Polly.Ruth-Neural",
+  es: "Polly.Mia-Neural",
 };
 
 /** Speech-recognition locales passed to <Gather language="...">. */
@@ -183,7 +188,11 @@ const SPEECH_LOCALE_BY_LANGUAGE: Record<VoiceLanguage, string> = {
 };
 
 export function voiceForLanguage(language: VoiceLanguage = "en"): string {
-  return VOICE_BY_LANGUAGE[language] ?? VOICE_BY_LANGUAGE.en;
+  const override =
+    language === "es"
+      ? process.env.RECEPTIONIST_VOICE_ES?.trim()
+      : process.env.RECEPTIONIST_VOICE_EN?.trim();
+  return override || VOICE_BY_LANGUAGE[language] || VOICE_BY_LANGUAGE.en;
 }
 
 export function speechLocaleForLanguage(language: VoiceLanguage = "en"): string {
@@ -253,7 +262,7 @@ export function detectSpokenLanguage(
   return current;
 }
 
-export function twimlSay(text: string, voice = "Polly.Joanna"): string {
+export function twimlSay(text: string, voice = "Polly.Ruth-Neural"): string {
   return `<Say voice="${voice}">${escapeXml(text)}</Say>`;
 }
 
