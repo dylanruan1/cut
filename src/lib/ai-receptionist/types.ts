@@ -118,7 +118,13 @@ export type ShopContext = {
   address: string | null;
   phone: string | null;
   timezone: string;
-  services: Array<{ id: string; name: string; duration: number }>;
+  services: Array<{
+    id: string;
+    name: string;
+    duration: number;
+    /** Deposit in dollars when the shop requires one for this service. */
+    depositAmount?: number | null;
+  }>;
   barbers: Array<{
     id: string;
     name: string;

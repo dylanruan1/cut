@@ -90,8 +90,12 @@ function buildSystemPrompt(shop: ShopContext): string {
   const tz = resolveShopTimezone(shop.timezone);
   const now = formatInTimeZone(new Date(), tz, "EEEE, MMMM d, yyyy 'at' h:mm a");
   const services =
-    shop.services.map((s) => `${s.name} (${s.duration} min)`).join(", ") ||
-    "none listed";
+    shop.services
+      .map((s) => {
+        const deposit = s.depositAmount ? `, $${s.depositAmount} deposit` : "";
+        return `${s.name} (${s.duration} min${deposit})`;
+      })
+      .join(", ") || "none listed";
   const barbers = shop.barbers.map((b) => b.name).join(", ") || "any available";
 
   return [
@@ -132,6 +136,7 @@ function buildSystemPrompt(shop: ShopContext): string {
     `- Only after book_appointment returns success do you warmly confirm and mention a text confirmation is on the way.`,
     `- If a requested time isn't available, offer the nearest options the tool returns.`,
     `- Never offer or agree to a time earlier today that has already passed. If a caller asks for a time that's already gone by, let them know warmly and suggest later today or another day.`,
+    `- If the chosen service lists a deposit, mention it naturally before booking (e.g. "there's a $10 deposit to hold the spot"). After booking, the system texts them a payment link — tell them to watch for it, and that the time is held until they pay.`,
     ``,
     `TOOL INPUT FORMAT:`,
     `- Dates must be YYYY-MM-DD. Times must be 24-hour HH:mm (e.g. 4 PM = "16:00").`,

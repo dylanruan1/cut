@@ -13,6 +13,8 @@ import {
 } from "./availability";
 import { describeBookingForVoice } from "./prompts";
 import { isDoubleBookingError } from "@/lib/booking-conflict";
+import { getStripe, getAppUrl } from "@/lib/stripe";
+import { buildDepositCheckoutParams, toCents } from "@/lib/stripe-connect";
 import { sendReceptionistSms } from "./sms";
 import type {
   BookingResult,
@@ -25,6 +27,106 @@ export type ExecuteBookingInput = {
   parsed: ParsedBookingRequest;
   callerPhone: string;
 };
+
+/**
+ * How long a phone booking is held while the caller pays the texted deposit
+ * link. Stripe requires Checkout sessions to expire no sooner than 30 minutes.
+ */
+const PHONE_HOLD_MINUTES = 30;
+
+type DepositRequirement = {
+  amount: number;
+  connectAccountId: string;
+  shopSlug: string;
+};
+
+/**
+ * Returns the deposit owed for a service, or null when none applies.
+ * Requires the shop to have deposits switched on AND an active payout account.
+ */
+async function resolveDepositRequirement(
+  shopId: string,
+  serviceId: string
+): Promise<DepositRequirement | null> {
+  const [shop, service] = await Promise.all([
+    prisma.barbershop.findUnique({
+      where: { id: shopId },
+      select: {
+        slug: true,
+        depositsEnabled: true,
+        connectStatus: true,
+        stripeConnectAccountId: true,
+      },
+    }),
+    prisma.service.findUnique({
+      where: { id: serviceId },
+      select: { depositAmount: true },
+    }),
+  ]);
+
+  if (
+    !shop?.depositsEnabled ||
+    shop.connectStatus !== "ACTIVE" ||
+    !shop.stripeConnectAccountId
+  ) {
+    return null;
+  }
+
+  const amount = service?.depositAmount ? Number(service.depositAmount) : 0;
+  if (!(amount > 0)) return null;
+
+  return {
+    amount,
+    connectAccountId: shop.stripeConnectAccountId,
+    shopSlug: shop.slug,
+  };
+}
+
+/** Creates the Stripe Checkout session whose link gets texted to the caller. */
+async function createPhoneDepositCheckout(input: {
+  appointmentId: string;
+  barbershopId: string;
+  connectAccountId: string;
+  shopName: string;
+  shopSlug: string;
+  serviceName: string;
+  depositDollars: number;
+}): Promise<string> {
+  const stripe = getStripe();
+  if (!stripe) throw new Error("Stripe is not configured");
+
+  const base = getAppUrl();
+  const session = await stripe.checkout.sessions.create(
+    buildDepositCheckoutParams({
+      connectAccountId: input.connectAccountId,
+      shopName: input.shopName,
+      serviceName: input.serviceName,
+      depositCents: toCents(input.depositDollars),
+      appointmentId: input.appointmentId,
+      barbershopId: input.barbershopId,
+      successUrl: `${base}/book/${input.shopSlug}?deposit=success&appointment=${input.appointmentId}`,
+      cancelUrl: `${base}/book/${input.shopSlug}?deposit=canceled`,
+      expiresAt: Math.floor((Date.now() + PHONE_HOLD_MINUTES * 60_000) / 1000),
+    })
+  );
+
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+
+  await prisma.appointment.update({
+    where: { id: input.appointmentId },
+    data: { stripeCheckoutSessionId: session.id },
+  });
+
+  return session.url;
+}
+
+/** "$10" reads better than "10 dollars" in most TTS voices, but be explicit. */
+function formatMoneyForVoice(amount: number): string {
+  const whole = Math.round(amount);
+  return Number.isInteger(amount) || Math.abs(amount - whole) < 0.005
+    ? `${whole} dollar${whole === 1 ? "" : "s"}`
+    : `${amount.toFixed(2)} dollars`;
+}
 
 function normalizeServiceMatch(
   requested: string | undefined,
@@ -187,6 +289,10 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
   const service = availability.service;
   const options = availability.options;
 
+  // Does this booking need a deposit? Read live from the DB — ShopContext
+  // carries no payment state, and it must never be trusted from the caller.
+  const deposit = await resolveDepositRequirement(shop.id, service.id);
+
   const slot = options[0];
   // Prefer re-deriving from preferred wall-clock so store + speak stay aligned.
   const startTime =
@@ -255,7 +361,13 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
         startTime,
         endTime,
         duration: service.duration,
-        status: "CONFIRMED",
+        // With a deposit due the slot is only held until the caller pays.
+        status: deposit ? "PENDING" : "CONFIRMED",
+        depositStatus: deposit ? "PENDING" : "NONE",
+        depositAmount: deposit ? deposit.amount : null,
+        holdExpiresAt: deposit
+          ? new Date(Date.now() + PHONE_HOLD_MINUTES * 60_000)
+          : null,
         source: "ai_receptionist",
         clientNameSnapshot: clientName,
         clientPhoneSnapshot: callerPhone,
@@ -277,12 +389,61 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
   await prisma.notification.create({
     data: {
       barbershopId: shop.id,
-      title: "Phone booking",
-      message: `${clientName} booked ${service.name} with ${slot.barberName} via AI receptionist`,
+      title: deposit ? "Phone booking (awaiting deposit)" : "Phone booking",
+      message: deposit
+        ? `${clientName} requested ${service.name} with ${slot.barberName} — deposit link sent`
+        : `${clientName} booked ${service.name} with ${slot.barberName} via AI receptionist`,
       type: "APPOINTMENT",
       metadata: { appointmentId: appointment.id, source: "ai_receptionist" },
     },
   });
+
+  // Deposit flow: a caller can't pay over the phone, so text them a secure
+  // payment link and hold the slot until it's paid.
+  if (deposit) {
+    const whenSpoken = formatAppointmentWhenForVoice(
+      appointment.startTime,
+      timezone
+    );
+    try {
+      const url = await createPhoneDepositCheckout({
+        appointmentId: appointment.id,
+        barbershopId: shop.id,
+        connectAccountId: deposit.connectAccountId,
+        shopName: shop.name,
+        shopSlug: deposit.shopSlug,
+        serviceName: service.name,
+        depositDollars: deposit.amount,
+      });
+
+      await sendReceptionistSms({
+        to: callerPhone,
+        barbershopId: shop.id,
+        appointmentId: appointment.id,
+        body: `${shop.name}: to lock in your ${service.name} on ${whenSpoken}, pay the $${deposit.amount.toFixed(0)} deposit here within ${PHONE_HOLD_MINUTES} minutes: ${url}`,
+      });
+
+      return {
+        success: true,
+        appointmentId: appointment.id,
+        message: `Almost done. I've texted you a link to pay the ${formatMoneyForVoice(deposit.amount)} deposit. I'm holding ${whenSpoken} for you for the next ${PHONE_HOLD_MINUTES} minutes, and it's confirmed as soon as you pay.`,
+      };
+    } catch (error) {
+      console.error("[ai-receptionist/booking] deposit link failed", error);
+      // Don't leave a phantom hold if we couldn't send the link.
+      await prisma.appointment
+        .update({
+          where: { id: appointment.id },
+          data: { status: "CANCELLED", depositStatus: "FAILED", holdExpiresAt: null },
+        })
+        .catch(() => {});
+      return {
+        success: false,
+        message: `I'm having trouble sending the deposit link right now. Please call the shop directly to finish booking.`,
+        error: "deposit_link_failed",
+      };
+    }
+  }
 
   const spokenWhen = formatAppointmentWhenForVoice(appointment.startTime, timezone);
   const spokenTime = formatAppointmentTimeForVoice(appointment.startTime, timezone);

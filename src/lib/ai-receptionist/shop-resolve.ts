@@ -31,7 +31,7 @@ export async function resolveShopForTwilioTo(
     prisma.service.findMany({
       where: { barbershopId: barbershop.id, isActive: true },
       orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true, duration: true },
+      select: { id: true, name: true, duration: true, depositAmount: true },
     }),
     prisma.barber.findMany({
       where: { barbershopId: barbershop.id, isActive: true },
@@ -63,6 +63,13 @@ export async function resolveShopForTwilioTo(
     }),
   ]);
 
+  // Deposits are only real when the shop has switched them on and its payout
+  // account can actually accept charges.
+  const depositsLive =
+    barbershop.depositsEnabled &&
+    barbershop.connectStatus === "ACTIVE" &&
+    Boolean(barbershop.stripeConnectAccountId);
+
   return {
     unmatched: false,
     shop: {
@@ -75,6 +82,9 @@ export async function resolveShopForTwilioTo(
         id: s.id,
         name: s.name,
         duration: s.duration,
+        // Only surfaced to the caller when the shop can actually charge it.
+        depositAmount:
+          depositsLive && s.depositAmount ? Number(s.depositAmount) : null,
       })),
       barbers: barbers.map((b) => ({
         id: b.id,
