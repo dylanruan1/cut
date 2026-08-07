@@ -286,6 +286,19 @@ model Appointment {
   @@index([barberId, startTime])
   @@index([clientId])
   @@map("appointments")
+  /// DATABASE-LEVEL DOUBLE-BOOKING GUARD (not managed by Prisma).
+  /// Prisma cannot express Postgres exclusion constraints, so this is applied
+  /// as raw SQL and must be re-applied to any freshly provisioned database:
+  ///
+  ///   CREATE EXTENSION IF NOT EXISTS btree_gist;
+  ///   ALTER TABLE appointments
+  ///     ADD CONSTRAINT appointments_no_double_booking
+  ///     EXCLUDE USING gist (
+  ///       "barberId" WITH =,
+  ///       tsrange("startTime", "endTime") WITH &&
+  ///     ) WHERE (status <> 'CANCELLED');
+  ///
+  /// Violations surface as SQLSTATE 23P01; see src/lib/booking-conflict.ts.
 }
 
 model BusinessHour {

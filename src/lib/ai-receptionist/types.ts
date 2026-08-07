@@ -119,13 +119,33 @@ export type ShopContext = {
   phone: string | null;
   timezone: string;
   services: Array<{ id: string; name: string; duration: number }>;
-  barbers: Array<{ id: string; name: string }>;
+  barbers: Array<{
+    id: string;
+    name: string;
+    /**
+     * Per-barber schedule. When omitted, the barber is assumed available
+     * during all shop hours (back-compat for shops that never set them).
+     */
+    workingHours?: Array<{
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      isOff: boolean;
+    }>;
+    /**
+     * Services this barber performs. When omitted or empty, the barber is
+     * assumed to perform every service.
+     */
+    serviceIds?: string[];
+  }>;
   businessHours: Array<{
     dayOfWeek: number;
     openTime: string;
     closeTime: string;
     isClosed: boolean;
   }>;
+  /** Dates the shop is closed (or has special hours). YYYY-MM-DD keys. */
+  holidays?: Array<{ date: string; isClosed: boolean }>;
 };
 
 export type ProcessReceptionistInput = {

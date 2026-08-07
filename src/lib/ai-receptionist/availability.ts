@@ -58,9 +58,15 @@ export function findAvailability(input: FindAvailabilityInput): AvailabilityOpti
     return [];
   }
 
-  const barbers = barberId
-    ? shop.barbers.filter((b) => b.id === barberId)
-    : shop.barbers;
+  // Shop-wide closures (holidays) override normal business hours.
+  const holiday = shop.holidays?.find((h) => h.date === preferredDate);
+  if (holiday?.isClosed) {
+    return [];
+  }
+
+  const barbers = (
+    barberId ? shop.barbers.filter((b) => b.id === barberId) : shop.barbers
+  ).filter((b) => barberPerformsService(b, serviceId));
 
   if (barbers.length === 0) {
     return [];
@@ -102,6 +108,20 @@ export function findAvailability(input: FindAvailabilityInput): AvailabilityOpti
     }
 
     for (const barber of barbers) {
+      // A barber can only be booked inside their own working hours.
+      if (
+        !withinBarberHours(
+          barber,
+          dayOfWeek,
+          slotStart,
+          slotEnd,
+          preferredDate,
+          timezone
+        )
+      ) {
+        continue;
+      }
+
       const conflict = existingAppointments.some(
         (apt) =>
           apt.barberId === barber.id &&
@@ -159,6 +179,43 @@ export function combineDateAndTime(
   timezone?: string | null
 ): Date {
   return parseReceptionistDateTime(date, time, timezone);
+}
+
+/**
+ * Whether a barber performs a given service.
+ * A barber with no explicit assignments is treated as performing everything,
+ * so shops that never configured this keep working as before.
+ */
+function barberPerformsService(
+  barber: ShopContext["barbers"][number],
+  serviceId: string
+): boolean {
+  if (!barber.serviceIds || barber.serviceIds.length === 0) return true;
+  return barber.serviceIds.includes(serviceId);
+}
+
+/**
+ * Whether a slot fits inside this barber's own schedule for the day.
+ * A barber with no configured hours inherits the shop's hours (the caller has
+ * already constrained the slot to those), so this returns true.
+ */
+function withinBarberHours(
+  barber: ShopContext["barbers"][number],
+  dayOfWeek: number,
+  slotStart: Date,
+  slotEnd: Date,
+  date: string,
+  timezone: string
+): boolean {
+  if (!barber.workingHours || barber.workingHours.length === 0) return true;
+
+  const wh = barber.workingHours.find((h) => h.dayOfWeek === dayOfWeek);
+  // No entry for this weekday means the barber doesn't work it.
+  if (!wh || wh.isOff) return false;
+
+  const start = combineDateAndTime(date, wh.startTime, timezone);
+  const end = combineDateAndTime(date, wh.endTime, timezone);
+  return slotStart >= start && slotEnd <= end;
 }
 
 function dayOfWeekInTimezone(date: string, timezone: string): number {

@@ -16,6 +16,10 @@ import {
   type ExistingAppointment,
 } from "@/lib/ai-receptionist/availability";
 import { canUseCalendar } from "@/lib/subscription";
+import {
+  isDoubleBookingError,
+  DOUBLE_BOOKING_MESSAGE,
+} from "@/lib/booking-conflict";
 import { getStripe, getAppUrl } from "@/lib/stripe";
 import {
   buildDepositCheckoutParams,
@@ -86,13 +90,25 @@ export type PublicShop = {
     /** Required deposit in dollars, or null when none. */
     depositAmount: string | null;
   }>;
-  barbers: Array<{ id: string; name: string; photoUrl: string | null }>;
+  barbers: Array<{
+    id: string;
+    name: string;
+    photoUrl: string | null;
+    workingHours: Array<{
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      isOff: boolean;
+    }>;
+    serviceIds: string[];
+  }>;
   businessHours: Array<{
     dayOfWeek: number;
     openTime: string;
     closeTime: string;
     isClosed: boolean;
   }>;
+  holidays: Array<{ date: string; isClosed: boolean }>;
 };
 
 /**
@@ -159,8 +175,26 @@ export async function getPublicShop(slug: string): Promise<PublicShop | null> {
         where: { isActive: true },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       },
-      barbers: { where: { isActive: true }, orderBy: { name: "asc" } },
+      barbers: {
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        include: {
+          workingHours: {
+            select: {
+              dayOfWeek: true,
+              startTime: true,
+              endTime: true,
+              isOff: true,
+            },
+          },
+          services: { select: { serviceId: true } },
+        },
+      },
       businessHours: true,
+      holidays: {
+        where: { date: { gte: new Date(Date.now() - 86_400_000) } },
+        select: { date: true, isClosed: true },
+      },
     },
   });
 
@@ -197,6 +231,12 @@ export async function getPublicShop(slug: string): Promise<PublicShop | null> {
       id: b.id,
       name: b.name,
       photoUrl: b.photoUrl,
+      workingHours: b.workingHours,
+      serviceIds: b.services.map((s) => s.serviceId),
+    })),
+    holidays: shop.holidays.map((h) => ({
+      date: h.date.toISOString().slice(0, 10),
+      isClosed: h.isClosed,
     })),
     businessHours: shop.businessHours.map((h) => ({
       dayOfWeek: h.dayOfWeek,
@@ -279,8 +319,14 @@ export async function getPublicAvailability(input: unknown): Promise<{
         name: s.name,
         duration: s.duration,
       })),
-      barbers: shop.barbers.map((b) => ({ id: b.id, name: b.name })),
+      barbers: shop.barbers.map((b) => ({
+        id: b.id,
+        name: b.name,
+        workingHours: b.workingHours,
+        serviceIds: b.serviceIds,
+      })),
       businessHours: shop.businessHours,
+      holidays: shop.holidays,
     },
     serviceId: service.id,
     serviceName: service.name,
@@ -444,8 +490,14 @@ export async function createPublicBooking(
         name: s.name,
         duration: s.duration,
       })),
-      barbers: shop.barbers.map((b) => ({ id: b.id, name: b.name })),
+      barbers: shop.barbers.map((b) => ({
+        id: b.id,
+        name: b.name,
+        workingHours: b.workingHours,
+        serviceIds: b.serviceIds,
+      })),
       businessHours: shop.businessHours,
+      holidays: shop.holidays,
     },
     serviceId: service.id,
     serviceName: service.name,
@@ -492,7 +544,9 @@ export async function createPublicBooking(
     : 0;
   const requiresDeposit = depositsLive && depositDollars > 0;
 
-  const appointment = await prisma.appointment.create({
+  let appointment;
+  try {
+    appointment = await prisma.appointment.create({
     data: {
       barbershopId: shop.id,
       clientId: client.id,
@@ -515,7 +569,14 @@ export async function createPublicBooking(
       clientPhoneSnapshot: phone,
       clientEmailSnapshot: email,
     },
-  });
+    });
+  } catch (error) {
+    // Lost a race with a simultaneous booking — the DB constraint caught it.
+    if (isDoubleBookingError(error)) {
+      return { error: DOUBLE_BOOKING_MESSAGE };
+    }
+    throw error;
+  }
 
   const when = `${formatShortDate(start, timezone)} at ${formatTime(start, timezone)}`;
 

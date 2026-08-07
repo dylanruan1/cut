@@ -27,7 +27,7 @@ export async function resolveShopForTwilioTo(
     }
   }
 
-  const [services, barbers, businessHours] = await Promise.all([
+  const [services, barbers, businessHours, holidays] = await Promise.all([
     prisma.service.findMany({
       where: { barbershopId: barbershop.id, isActive: true },
       orderBy: { sortOrder: "asc" },
@@ -35,11 +35,31 @@ export async function resolveShopForTwilioTo(
     }),
     prisma.barber.findMany({
       where: { barbershopId: barbershop.id, isActive: true },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        workingHours: {
+          select: {
+            dayOfWeek: true,
+            startTime: true,
+            endTime: true,
+            isOff: true,
+          },
+        },
+        services: { select: { serviceId: true } },
+      },
     }),
     prisma.businessHour.findMany({
       where: { barbershopId: barbershop.id },
       orderBy: { dayOfWeek: "asc" },
+    }),
+    // Only upcoming closures matter for booking.
+    prisma.holiday.findMany({
+      where: {
+        barbershopId: barbershop.id,
+        date: { gte: new Date(Date.now() - 86_400_000) },
+      },
+      select: { date: true, isClosed: true },
     }),
   ]);
 
@@ -56,13 +76,27 @@ export async function resolveShopForTwilioTo(
         name: s.name,
         duration: s.duration,
       })),
-      barbers,
+      barbers: barbers.map((b) => ({
+        id: b.id,
+        name: b.name,
+        workingHours: b.workingHours,
+        serviceIds: b.services.map((s) => s.serviceId),
+      })),
       businessHours: businessHours.map((h) => ({
         dayOfWeek: h.dayOfWeek,
         openTime: h.openTime,
         closeTime: h.closeTime,
         isClosed: h.isClosed,
       })),
+      holidays: holidays.map((h) => ({
+        date: toDateKey(h.date),
+        isClosed: h.isClosed,
+      })),
     },
   };
+}
+
+/** Prisma @db.Date comes back as a Date at UTC midnight — take the calendar day. */
+function toDateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }

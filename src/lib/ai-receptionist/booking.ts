@@ -12,6 +12,7 @@ import {
   type ExistingAppointment,
 } from "./availability";
 import { describeBookingForVoice } from "./prompts";
+import { isDoubleBookingError } from "@/lib/booking-conflict";
 import { sendReceptionistSms } from "./sms";
 import type {
   BookingResult,
@@ -243,21 +244,35 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
     );
   }
 
-  const appointment = await prisma.appointment.create({
-    data: {
-      barbershopId: shop.id,
-      clientId: client.id,
-      barberId: slot.barberId,
-      serviceId: service.id,
-      startTime,
-      endTime,
-      duration: service.duration,
-      status: "CONFIRMED",
-      source: "ai_receptionist",
-      clientNameSnapshot: clientName,
-      clientPhoneSnapshot: callerPhone,
-    },
-  });
+  let appointment;
+  try {
+    appointment = await prisma.appointment.create({
+      data: {
+        barbershopId: shop.id,
+        clientId: client.id,
+        barberId: slot.barberId,
+        serviceId: service.id,
+        startTime,
+        endTime,
+        duration: service.duration,
+        status: "CONFIRMED",
+        source: "ai_receptionist",
+        clientNameSnapshot: clientName,
+        clientPhoneSnapshot: callerPhone,
+      },
+    });
+  } catch (error) {
+    // Someone booked this exact slot mid-call — tell the caller, don't crash.
+    if (isDoubleBookingError(error)) {
+      return {
+        success: false,
+        message:
+          "Sorry, that time was just taken. Would you like a different time?",
+        error: "double_booked",
+      };
+    }
+    throw error;
+  }
 
   await prisma.notification.create({
     data: {

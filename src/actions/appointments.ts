@@ -18,6 +18,7 @@ import {
   resolveShopTimezone,
 } from "@/lib/datetime";
 import { sanitizeInput } from "@/lib/rate-limit";
+import { isDoubleBookingError } from "@/lib/booking-conflict";
 import { serializeForClient } from "@/lib/serializers";
 import { getAppointmentClientName } from "@/lib/utils";
 import { UserRole } from "@prisma/client";
@@ -76,28 +77,39 @@ export async function createAppointment(data: unknown) {
     });
   }
 
-  const appointment = await prisma.appointment.create({
-    data: {
-      barbershopId: user.barbershopId,
-      clientId: client.id,
-      barberId,
-      serviceId,
-      startTime: start,
-      endTime: end,
-      duration: service.duration,
-      notes: notes ? sanitizeInput(notes) : null,
-      status: status ?? "PENDING",
-      clientNameSnapshot: sanitizedName,
-      clientPhoneSnapshot: clientPhone,
-      clientEmailSnapshot: sanitizedEmail,
-    },
-    include: {
-      client: true,
-      barber: true,
-      service: true,
-      barbershop: true,
-    },
-  });
+  let appointment;
+  try {
+    appointment = await prisma.appointment.create({
+      data: {
+        barbershopId: user.barbershopId,
+        clientId: client.id,
+        barberId,
+        serviceId,
+        startTime: start,
+        endTime: end,
+        duration: service.duration,
+        notes: notes ? sanitizeInput(notes) : null,
+        status: status ?? "PENDING",
+        clientNameSnapshot: sanitizedName,
+        clientPhoneSnapshot: clientPhone,
+        clientEmailSnapshot: sanitizedEmail,
+      },
+      include: {
+        client: true,
+        barber: true,
+        service: true,
+        barbershop: true,
+      },
+    });
+  } catch (error) {
+    if (isDoubleBookingError(error)) {
+      return {
+        error:
+          "That barber already has an appointment overlapping this time. Pick another slot.",
+      };
+    }
+    throw error;
+  }
 
   const dateTime = `${formatShortDate(start, user.barbershop.timezone)} at ${formatTime(start, user.barbershop.timezone)}`;
   await sendSms(
@@ -181,11 +193,22 @@ export async function updateAppointment(id: string, data: unknown) {
     updateData.clientNameSnapshot = sanitizeInput(parsed.data.clientName);
   }
 
-  const appointment = await prisma.appointment.update({
-    where: { id },
-    data: updateData,
-    include: { client: true, barber: true, service: true, barbershop: true },
-  });
+  let appointment;
+  try {
+    appointment = await prisma.appointment.update({
+      where: { id },
+      data: updateData,
+      include: { client: true, barber: true, service: true, barbershop: true },
+    });
+  } catch (error) {
+    if (isDoubleBookingError(error)) {
+      return {
+        error:
+          "That barber already has an appointment overlapping this time. Pick another slot.",
+      };
+    }
+    throw error;
+  }
 
   if (parsed.data.status === "CANCELLED") {
     const dateTime = `${formatShortDate(existing.startTime, user.barbershop.timezone)} at ${formatTime(existing.startTime, user.barbershop.timezone)}`;
