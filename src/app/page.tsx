@@ -89,8 +89,16 @@ export default function HomePage() {
       </main>
 
       <footer className="border-t py-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+        <div className="container mx-auto flex flex-col items-center gap-3 px-4 text-center text-sm text-muted-foreground">
           <p>&copy; {new Date().getFullYear()} Cut. All rights reserved.</p>
+          <nav className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:text-foreground">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-foreground">
+              Terms of Service
+            </Link>
+          </nav>
         </div>
       </footer>
     </div>

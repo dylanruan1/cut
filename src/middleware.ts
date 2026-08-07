@@ -12,6 +12,9 @@ const publicRoutes = [
   "/pricing",
   // Customer-facing booking pages must work without an account.
   "/book",
+  // Legal pages are referenced publicly (incl. A2P/carrier review).
+  "/privacy",
+  "/terms",
   "/api/twilio",
   "/api/health",
   "/api/billing/webhook",
