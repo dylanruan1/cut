@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/db";
 import { addMinutes } from "date-fns";
 import { headers } from "next/headers";
@@ -15,6 +16,11 @@ import {
   type ExistingAppointment,
 } from "@/lib/ai-receptionist/availability";
 import { canUseCalendar } from "@/lib/subscription";
+import { getStripe, getAppUrl } from "@/lib/stripe";
+import {
+  buildDepositCheckoutParams,
+  toCents,
+} from "@/lib/stripe-connect";
 
 /**
  * Public (unauthenticated) booking actions for the customer-facing page at
@@ -31,6 +37,35 @@ import { canUseCalendar } from "@/lib/subscription";
 
 const MIN_LEAD_MINUTES = 30;
 const MAX_DAYS_AHEAD = 60;
+/**
+ * How long a slot is held while the customer completes deposit checkout.
+ * Stripe requires Checkout `expires_at` to be at least 30 minutes out, so the
+ * hold and the session expiry are kept in sync at 30 minutes.
+ */
+const HOLD_MINUTES = 30;
+
+/**
+ * Appointments that should block a time slot.
+ *
+ * A deposit hold blocks the slot while checkout is open, but once the hold
+ * lapses unpaid it must stop blocking — otherwise an abandoned checkout would
+ * silently take the time off the calendar forever.
+ */
+function blockingAppointmentWhere(
+  barbershopId: string,
+  from: Date,
+  to: Date
+): Prisma.AppointmentWhereInput {
+  return {
+    barbershopId,
+    status: { notIn: ["CANCELLED"] },
+    startTime: { gte: from, lte: to },
+    NOT: {
+      depositStatus: "PENDING",
+      holdExpiresAt: { lt: new Date() },
+    },
+  };
+}
 
 export type PublicShop = {
   id: string;
@@ -40,12 +75,16 @@ export type PublicShop = {
   phone: string | null;
   instagram: string | null;
   timezone: string;
+  /** True when the shop can actually take deposits (connected + switched on). */
+  depositsEnabled: boolean;
   services: Array<{
     id: string;
     name: string;
     description: string | null;
     duration: number;
     price: string;
+    /** Required deposit in dollars, or null when none. */
+    depositAmount: string | null;
   }>;
   barbers: Array<{ id: string; name: string; photoUrl: string | null }>;
   businessHours: Array<{
@@ -55,6 +94,49 @@ export type PublicShop = {
     isClosed: boolean;
   }>;
 };
+
+/**
+ * Opens a Stripe Checkout Session for an appointment deposit and records the
+ * session on the appointment so the webhook can match it back.
+ */
+async function createDepositCheckout(input: {
+  appointmentId: string;
+  barbershopId: string;
+  connectAccountId: string;
+  shopName: string;
+  shopSlug: string;
+  serviceName: string;
+  depositDollars: number;
+  customerEmail: string | null;
+}): Promise<string> {
+  const stripe = getStripe();
+  if (!stripe) throw new Error("Stripe is not configured");
+
+  const base = getAppUrl();
+  const session = await stripe.checkout.sessions.create(
+    buildDepositCheckoutParams({
+      connectAccountId: input.connectAccountId,
+      shopName: input.shopName,
+      serviceName: input.serviceName,
+      depositCents: toCents(input.depositDollars),
+      appointmentId: input.appointmentId,
+      barbershopId: input.barbershopId,
+      customerEmail: input.customerEmail,
+      successUrl: `${base}/book/${input.shopSlug}?deposit=success&appointment=${input.appointmentId}`,
+      cancelUrl: `${base}/book/${input.shopSlug}?deposit=canceled`,
+      expiresAt: Math.floor((Date.now() + HOLD_MINUTES * 60_000) / 1000),
+    })
+  );
+
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+
+  await prisma.appointment.update({
+    where: { id: input.appointmentId },
+    data: { stripeCheckoutSessionId: session.id },
+  });
+
+  return session.url;
+}
 
 async function clientKey(prefix: string): Promise<string> {
   const h = await headers();
@@ -87,6 +169,10 @@ export async function getPublicShop(slug: string): Promise<PublicShop | null> {
   if (!canUseCalendar(shop)) return null;
   if (shop.services.length === 0 || shop.barbers.length === 0) return null;
 
+  // Deposits require both an active connected payout account and the switch on.
+  const depositsEnabled =
+    shop.depositsEnabled && shop.connectStatus === "ACTIVE";
+
   return {
     id: shop.id,
     name: shop.name,
@@ -95,12 +181,17 @@ export async function getPublicShop(slug: string): Promise<PublicShop | null> {
     phone: shop.phone,
     instagram: shop.instagram,
     timezone: resolveShopTimezone(shop.timezone),
+    depositsEnabled,
     services: shop.services.map((s) => ({
       id: s.id,
       name: s.name,
       description: s.description,
       duration: s.duration,
       price: s.price.toString(),
+      depositAmount:
+        depositsEnabled && s.depositAmount && Number(s.depositAmount) > 0
+          ? s.depositAmount.toString()
+          : null,
     })),
     barbers: shop.barbers.map((b) => ({
       id: b.id,
@@ -166,11 +257,7 @@ export async function getPublicAvailability(input: unknown): Promise<{
   }
 
   const existing = await prisma.appointment.findMany({
-    where: {
-      barbershopId: shop.id,
-      status: { notIn: ["CANCELLED"] },
-      startTime: { gte: dayStart, lte: dayEnd },
-    },
+    where: blockingAppointmentWhere(shop.id, dayStart, dayEnd),
     select: { startTime: true, endTime: true, barberId: true },
   });
 
@@ -223,6 +310,41 @@ export async function getPublicAvailability(input: unknown): Promise<{
   return { slots };
 }
 
+export type DepositConfirmation = {
+  when: string;
+  serviceName: string;
+  barberName: string;
+  clientName: string;
+  paid: boolean;
+};
+
+/**
+ * Read-back for the Stripe return URL. Scoped to the shop so an appointment id
+ * from one shop can't be probed through another shop's page.
+ */
+export async function getDepositConfirmation(
+  appointmentId: string,
+  barbershopId: string
+): Promise<DepositConfirmation | null> {
+  const appointment = await prisma.appointment.findFirst({
+    where: { id: appointmentId, barbershopId },
+    include: { service: true, barber: true, barbershop: true, client: true },
+  });
+  if (!appointment) return null;
+
+  const timezone = resolveShopTimezone(appointment.barbershop.timezone);
+  return {
+    when: `${formatShortDate(appointment.startTime, timezone)} at ${formatTime(
+      appointment.startTime,
+      timezone
+    )}`,
+    serviceName: appointment.service.name,
+    barberName: appointment.barber.name,
+    clientName: appointment.clientNameSnapshot ?? appointment.client.name,
+    paid: appointment.depositStatus === "PAID",
+  };
+}
+
 const bookingSchema = z.object({
   slug: z.string().min(1),
   serviceId: z.string().min(1),
@@ -239,6 +361,8 @@ const bookingSchema = z.object({
 export type PublicBookingResult = {
   success?: true;
   error?: string;
+  /** Present when a deposit is required — client should redirect here. */
+  checkoutUrl?: string;
   appointment?: {
     id: string;
     when: string;
@@ -267,6 +391,22 @@ export async function createPublicBooking(
   const service = shop.services.find((s) => s.id === parsed.data.serviceId);
   if (!service) return { error: "Service not found." };
 
+  // Deposit eligibility is re-checked against the database, never trusted from
+  // the client. Also grab the payout account we'd send the money to.
+  const shopPayments = await prisma.barbershop.findUnique({
+    where: { id: shop.id },
+    select: {
+      depositsEnabled: true,
+      connectStatus: true,
+      stripeConnectAccountId: true,
+    },
+  });
+  const connectAccountId = shopPayments?.stripeConnectAccountId ?? null;
+  const depositsLive =
+    Boolean(shopPayments?.depositsEnabled) &&
+    shopPayments?.connectStatus === "ACTIVE" &&
+    Boolean(connectAccountId);
+
   const timezone = shop.timezone;
   const start = combineDateAndTime(parsed.data.date, parsed.data.time, timezone);
   const end = addMinutes(start, service.duration);
@@ -279,11 +419,7 @@ export async function createPublicBooking(
   const dayStart = combineDateAndTime(parsed.data.date, "00:00", timezone);
   const dayEnd = combineDateAndTime(parsed.data.date, "23:59", timezone);
   const existing = await prisma.appointment.findMany({
-    where: {
-      barbershopId: shop.id,
-      status: { notIn: ["CANCELLED"] },
-      startTime: { gte: dayStart, lte: dayEnd },
-    },
+    where: blockingAppointmentWhere(shop.id, dayStart, dayEnd),
     select: { startTime: true, endTime: true, barberId: true },
   });
 
@@ -351,6 +487,11 @@ export async function createPublicBooking(
     });
   }
 
+  const depositDollars = service.depositAmount
+    ? Number(service.depositAmount)
+    : 0;
+  const requiresDeposit = depositsLive && depositDollars > 0;
+
   const appointment = await prisma.appointment.create({
     data: {
       barbershopId: shop.id,
@@ -360,7 +501,14 @@ export async function createPublicBooking(
       startTime: start,
       endTime: end,
       duration: service.duration,
-      status: "CONFIRMED",
+      // A deposit booking is only pencilled in until payment succeeds; the
+      // hold keeps the slot reserved during checkout and lapses if abandoned.
+      status: requiresDeposit ? "PENDING" : "CONFIRMED",
+      depositStatus: requiresDeposit ? "PENDING" : "NONE",
+      depositAmount: requiresDeposit ? depositDollars : null,
+      holdExpiresAt: requiresDeposit
+        ? new Date(Date.now() + HOLD_MINUTES * 60_000)
+        : null,
       source: "online",
       notes,
       clientNameSnapshot: name,
@@ -370,6 +518,31 @@ export async function createPublicBooking(
   });
 
   const when = `${formatShortDate(start, timezone)} at ${formatTime(start, timezone)}`;
+
+  // Deposit path: hand the customer to Stripe Checkout. The appointment is
+  // confirmed by the webhook once payment succeeds.
+  if (requiresDeposit) {
+    try {
+      const checkoutUrl = await createDepositCheckout({
+        appointmentId: appointment.id,
+        barbershopId: shop.id,
+        connectAccountId: connectAccountId!,
+        shopName: shop.name,
+        shopSlug: shop.slug,
+        serviceName: service.name,
+        depositDollars,
+        customerEmail: email,
+      });
+      return { success: true, checkoutUrl };
+    } catch (error) {
+      console.error("[public-booking] deposit checkout failed", error);
+      // Don't leave a phantom hold behind if we couldn't start checkout.
+      await prisma.appointment.delete({ where: { id: appointment.id } }).catch(() => {});
+      return {
+        error: "We couldn't start the payment. Please try again in a moment.",
+      };
+    }
+  }
 
   await prisma.notification.create({
     data: {

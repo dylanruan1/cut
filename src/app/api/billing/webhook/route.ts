@@ -12,6 +12,10 @@ import {
   planFromStripePriceId,
   type ShopPlan,
 } from "@/lib/subscription";
+import { deriveConnectStatus } from "@/lib/stripe-connect";
+import { sendSms, buildBookingConfirmationSms } from "@/lib/twilio";
+import { formatTime, formatShortDate } from "@/lib/dates";
+import { resolveShopTimezone } from "@/lib/datetime";
 
 export const runtime = "nodejs";
 
@@ -67,6 +71,121 @@ async function applySubscriptionToShop(
   });
 }
 
+/**
+ * Deposit paid — promote the held appointment to a real confirmed booking and
+ * text the customer. Idempotent: replaying the event is a no-op.
+ */
+async function confirmDepositPaid(session: Stripe.Checkout.Session) {
+  const appointmentId = session.metadata?.appointmentId;
+  if (!appointmentId) {
+    console.warn("[billing/webhook] deposit session missing appointmentId", {
+      sessionId: session.id,
+    });
+    return;
+  }
+
+  const appointment = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    include: { service: true, barber: true, barbershop: true, client: true },
+  });
+  if (!appointment) {
+    console.warn("[billing/webhook] deposit for unknown appointment", {
+      appointmentId,
+    });
+    return;
+  }
+  if (appointment.depositStatus === "PAID") return; // already handled
+
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: {
+      status: "CONFIRMED",
+      depositStatus: "PAID",
+      holdExpiresAt: null,
+      stripePaymentIntentId:
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id ?? null,
+    },
+  });
+
+  const timezone = resolveShopTimezone(appointment.barbershop.timezone);
+  const when = `${formatShortDate(appointment.startTime, timezone)} at ${formatTime(
+    appointment.startTime,
+    timezone
+  )}`;
+  const clientName = appointment.clientNameSnapshot ?? appointment.client.name;
+  const phone = appointment.clientPhoneSnapshot ?? appointment.client.phone;
+
+  await prisma.notification.create({
+    data: {
+      barbershopId: appointment.barbershopId,
+      title: "Online booking (deposit paid)",
+      message: `${clientName} booked ${appointment.service.name} with ${appointment.barber.name} and paid a deposit`,
+      type: "APPOINTMENT",
+      metadata: { appointmentId: appointment.id, source: "online" },
+    },
+  });
+
+  await sendSms(
+    phone,
+    buildBookingConfirmationSms(
+      clientName,
+      appointment.service.name,
+      appointment.barber.name,
+      when,
+      appointment.barbershop.name
+    ),
+    appointment.barbershopId,
+    "booking_confirmation",
+    appointment.id
+  );
+}
+
+/** Checkout expired without payment — free the slot back up. */
+async function releaseUnpaidHold(session: Stripe.Checkout.Session) {
+  const appointmentId = session.metadata?.appointmentId;
+  if (!appointmentId) return;
+
+  const appointment = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    select: { id: true, depositStatus: true },
+  });
+  // Never cancel something that actually got paid.
+  if (!appointment || appointment.depositStatus !== "PENDING") return;
+
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: { status: "CANCELLED", depositStatus: "FAILED", holdExpiresAt: null },
+  });
+}
+
+/** Mirrors Stripe Connect account state onto the shop record. */
+async function syncConnectAccount(account: Stripe.Account) {
+  const shop = await prisma.barbershop.findFirst({
+    where: { stripeConnectAccountId: account.id },
+    select: { id: true, depositsEnabled: true },
+  });
+  if (!shop) return;
+
+  const status = deriveConnectStatus({
+    id: account.id,
+    chargesEnabled: Boolean(account.charges_enabled),
+    payoutsEnabled: Boolean(account.payouts_enabled),
+    detailsSubmitted: Boolean(account.details_submitted),
+    currentlyDue: account.requirements?.currently_due ?? [],
+  });
+
+  await prisma.barbershop.update({
+    where: { id: shop.id },
+    data: {
+      connectStatus: status,
+      // Losing the ability to charge must also switch deposits off.
+      depositsEnabled: status === "ACTIVE" ? shop.depositsEnabled : false,
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   if (!isStripeConfigured() && !process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json(
@@ -106,6 +225,13 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        // Appointment deposits are a different flow from SaaS subscriptions.
+        if (session.metadata?.kind === "appointment_deposit") {
+          await confirmDepositPaid(session);
+          break;
+        }
+
         const barbershopId =
           session.metadata?.barbershopId || session.client_reference_id;
         const plan = session.metadata?.plan;
@@ -151,6 +277,19 @@ export async function POST(request: NextRequest) {
             },
           });
         }
+        break;
+      }
+      case "checkout.session.expired": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.kind === "appointment_deposit") {
+          await releaseUnpaidHold(session);
+        }
+        break;
+      }
+      case "account.updated": {
+        // Keep a shop's payout status in sync as Stripe verifies them.
+        const account = event.data.object as Stripe.Account;
+        await syncConnectAccount(account);
         break;
       }
       case "invoice.payment_failed": {

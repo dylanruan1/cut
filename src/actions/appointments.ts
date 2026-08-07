@@ -282,6 +282,11 @@ export async function createService(data: unknown) {
       description: parsed.data.description
         ? sanitizeInput(parsed.data.description)
         : null,
+      // Treat 0/blank as "no deposit" rather than a $0 deposit.
+      depositAmount:
+        parsed.data.depositAmount && parsed.data.depositAmount > 0
+          ? parsed.data.depositAmount
+          : null,
     },
   });
 
@@ -304,6 +309,11 @@ export async function updateService(id: string, data: unknown) {
       description: parsed.data.description
         ? sanitizeInput(parsed.data.description)
         : null,
+      // Treat 0/blank as "no deposit" rather than a $0 deposit.
+      depositAmount:
+        parsed.data.depositAmount && parsed.data.depositAmount > 0
+          ? parsed.data.depositAmount
+          : null,
     },
   });
 

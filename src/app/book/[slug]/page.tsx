@@ -1,14 +1,24 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getPublicShop } from "@/actions/public-booking";
+import {
+  getPublicShop,
+  getDepositConfirmation,
+} from "@/actions/public-booking";
 import { BookingWizard } from "@/components/booking/booking-wizard";
-import { Scissors, MapPin, Phone } from "lucide-react";
+import { Scissors, MapPin, Phone, Check } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ deposit?: string; appointment?: string }>;
+};
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
   const { slug } = await params;
   const shop = await getPublicShop(slug);
   if (!shop) return { title: "Book an appointment" };
@@ -22,10 +32,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function PublicBookingPage({ params }: Props) {
+export default async function PublicBookingPage({
+  params,
+  searchParams,
+}: Props) {
   const { slug } = await params;
+  const { deposit, appointment: appointmentId } = await searchParams;
   const shop = await getPublicShop(slug);
   if (!shop) notFound();
+
+  // Returning from Stripe Checkout after paying a deposit.
+  const paid =
+    deposit === "success" && appointmentId
+      ? await getDepositConfirmation(appointmentId, shop.id)
+      : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,7 +82,43 @@ export default async function PublicBookingPage({ params }: Props) {
       </header>
 
       <main className="container mx-auto max-w-2xl px-4 py-8">
-        <BookingWizard shop={shop} />
+        {paid ? (
+          <div className="rounded-2xl border bg-card p-8 text-center shadow-card">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+              <Check className="h-7 w-7 text-primary" />
+            </div>
+            <h2 className="text-2xl font-semibold tracking-tight">
+              {paid.paid ? "You're booked!" : "Payment received"}
+            </h2>
+            <p className="mt-2 text-muted-foreground">
+              {paid.paid
+                ? "Your deposit is paid and your appointment is confirmed."
+                : "We're finalizing your booking — you'll get a text shortly."}
+            </p>
+            <div className="mt-6 space-y-2 rounded-xl border bg-background p-4 text-left text-sm">
+              <Row label="Service" value={paid.serviceName} />
+              <Row label="Barber" value={paid.barberName} />
+              <Row label="When" value={paid.when} />
+              <Row label="Name" value={paid.clientName} />
+            </div>
+            <a
+              href={`/book/${shop.slug}`}
+              className="mt-6 inline-block text-sm underline underline-offset-4"
+            >
+              Book another appointment
+            </a>
+          </div>
+        ) : (
+          <>
+            {deposit === "canceled" && (
+              <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+                Payment was cancelled, so that time wasn&apos;t held. You can
+                pick a time and try again.
+              </div>
+            )}
+            <BookingWizard shop={shop} />
+          </>
+        )}
       </main>
 
       <footer className="container mx-auto max-w-2xl px-4 pb-10 text-center">
@@ -70,6 +126,15 @@ export default async function PublicBookingPage({ params }: Props) {
           Powered by <span className="font-medium">Cut.</span>
         </p>
       </footer>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right font-medium">{value}</span>
     </div>
   );
 }

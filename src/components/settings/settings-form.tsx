@@ -13,6 +13,7 @@ import { DAYS_OF_WEEK } from "@/lib/dates";
 import { getVoiceWebhookUrl } from "@/lib/voice-webhook";
 import Link from "next/link";
 import { Lock, Sparkles, Copy, Check, ExternalLink } from "lucide-react";
+import { PayoutsCard } from "@/components/settings/payouts-card";
 
 type PhoneSetupMethod = "NEW_TWILIO" | "FORWARD_EXISTING" | "PORT_TO_TWILIO";
 type PhoneSetupStatus = "NOT_STARTED" | "PENDING" | "CONNECTED" | "ERROR";
@@ -30,6 +31,8 @@ interface Shop {
   phoneSetupMethod?: PhoneSetupMethod | null;
   phoneSetupStatus?: PhoneSetupStatus | null;
   phonePortingNotes?: string | null;
+  connectStatus?: "NOT_CONNECTED" | "PENDING" | "ACTIVE" | "RESTRICTED" | null;
+  depositsEnabled?: boolean | null;
 }
 
 interface BusinessHour {
@@ -236,6 +239,12 @@ export function SettingsForm({
               </div>
             </CardContent>
           </Card>
+
+          <PayoutsCard
+            status={shop.connectStatus ?? "NOT_CONNECTED"}
+            depositsEnabled={Boolean(shop.depositsEnabled)}
+            canManage={canManage}
+          />
 
           <Card>
             <CardHeader>

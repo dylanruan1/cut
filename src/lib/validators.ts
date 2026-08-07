@@ -58,6 +58,8 @@ export const serviceSchema = z.object({
   duration: z.coerce.number().min(5, "Minimum 5 minutes"),
   price: z.coerce.number().min(0, "Price must be positive"),
   color: z.string().optional(),
+  /** Optional upfront deposit. 0 / empty means no deposit required. */
+  depositAmount: z.coerce.number().min(0).optional().nullable(),
 });
 
 export const barberSchema = z.object({

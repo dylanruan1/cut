@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
       where: {
         startTime: { gte: window24Start, lte: window24End },
         status: { in: ["CONFIRMED", "PENDING"] },
+        // Never remind someone whose deposit was never paid.
+        NOT: { depositStatus: "PENDING" },
       },
       include: { client: true, service: true, barbershop: true },
     }),
@@ -41,10 +43,23 @@ export async function GET(request: NextRequest) {
       where: {
         startTime: { gte: window2Start, lte: window2End },
         status: { in: ["CONFIRMED", "PENDING"] },
+        NOT: { depositStatus: "PENDING" },
       },
       include: { client: true, service: true, barbershop: true },
     }),
   ]);
+
+  // Safety net: release deposit holds whose checkout lapsed. Stripe normally
+  // sends checkout.session.expired, but this guarantees abandoned holds never
+  // linger on a shop's calendar even if that event is missed or delayed.
+  const releasedHolds = await prisma.appointment.updateMany({
+    where: {
+      depositStatus: "PENDING",
+      holdExpiresAt: { lt: new Date() },
+      status: { notIn: ["CANCELLED"] },
+    },
+    data: { status: "CANCELLED", depositStatus: "FAILED", holdExpiresAt: null },
+  });
 
   const sent: string[] = [];
 
@@ -94,5 +109,9 @@ export async function GET(request: NextRequest) {
     sent.push(`2h:${apt.id}`);
   }
 
-  return NextResponse.json({ sent, count: sent.length });
+  return NextResponse.json({
+    sent,
+    count: sent.length,
+    releasedHolds: releasedHolds.count,
+  });
 }

@@ -27,6 +27,15 @@ enum DepositStatus {
   PENDING
   PAID
   REFUNDED
+  FAILED
+}
+
+/// Stripe Connect onboarding state for a shop's payout account.
+enum ConnectStatus {
+  NOT_CONNECTED
+  PENDING
+  ACTIVE
+  RESTRICTED
 }
 
 enum InvitationStatus {
@@ -85,6 +94,13 @@ model Barbershop {
   phoneSetupMethod PhoneSetupMethod?
   phoneSetupStatus PhoneSetupStatus @default(NOT_STARTED)
   phonePortingNotes String?
+
+  /// Stripe Connect (Express) account that receives customer deposits.
+  /// Deposits are destination charges — the money goes to the shop, not to Cut.
+  stripeConnectAccountId String?       @unique
+  connectStatus          ConnectStatus @default(NOT_CONNECTED)
+  /// Master switch: shop must both connect payouts and enable deposits.
+  depositsEnabled        Boolean       @default(false)
 
   /// SaaS plan for this shop. Defaults to NONE until checkout/trial.
   plan                 ShopPlan           @default(NONE)
@@ -182,6 +198,9 @@ model Service {
   description  String?
   duration     Int
   price        Decimal  @db.Decimal(10, 2)
+  /// Optional upfront deposit required to book this service online.
+  /// Null or 0 means no deposit. Only charged when the shop has payouts connected.
+  depositAmount Decimal? @db.Decimal(10, 2)
   color        String   @default("#34C759")
   isActive     Boolean  @default(true)
   sortOrder    Int      @default(0)
@@ -243,6 +262,12 @@ model Appointment {
   status        AppointmentStatus @default(PENDING)
   depositStatus DepositStatus     @default(NONE)
   depositAmount Decimal?          @db.Decimal(10, 2)
+  /// Stripe objects for the deposit payment (destination charge on the shop's account).
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String?
+  /// While a deposit checkout is open the slot is held. Past this instant an
+  /// unpaid hold is released so the time becomes bookable again.
+  holdExpiresAt DateTime?
   source        String            @default("manual")
   /// Name given at booking time — prefer over client.name for display so history stays accurate.
   clientNameSnapshot  String?

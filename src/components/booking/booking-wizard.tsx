@@ -136,6 +136,11 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
         setError(res.error);
         return;
       }
+      // Deposit required — hand off to Stripe Checkout.
+      if (res.checkoutUrl) {
+        window.location.href = res.checkoutUrl;
+        return;
+      }
       if (res.success && res.appointment) {
         setBooked(res.appointment);
         setStep("done");
@@ -198,9 +203,16 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
                         {s.description}
                       </div>
                     )}
-                    <div className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {s.duration} min
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {s.duration} min
+                      </span>
+                      {s.depositAmount && (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
+                          ${Number(s.depositAmount).toFixed(0)} deposit
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="shrink-0 font-semibold">
@@ -312,8 +324,18 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
           <div className="mb-4 rounded-xl border bg-accent/40 p-4 text-sm">
             <div className="font-medium">{service.name}</div>
             <div className="text-muted-foreground">
-              {slot.label} · {barberId === "any" ? slot.barberName : slot.barberName}
+              {slot.label} · {slot.barberName}
             </div>
+            {service.depositAmount && (
+              <div className="mt-2 border-t pt-2 text-xs text-muted-foreground">
+                A{" "}
+                <span className="font-medium text-foreground">
+                  ${Number(service.depositAmount).toFixed(0)} deposit
+                </span>{" "}
+                is required to hold this time. It goes toward your $
+                {Number(service.price).toFixed(0)} total.
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -372,8 +394,10 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
               {pending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Booking…
+                  {service.depositAmount ? "Redirecting to payment…" : "Booking…"}
                 </>
+              ) : service.depositAmount ? (
+                `Pay $${Number(service.depositAmount).toFixed(0)} deposit & book`
               ) : (
                 "Confirm booking"
               )}

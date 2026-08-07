@@ -28,6 +28,7 @@ interface Service {
   description: string | null;
   duration: number;
   price: number;
+  depositAmount?: number | null;
   color: string;
   isActive: boolean;
 }
@@ -53,6 +54,9 @@ export function ServicesManager({ services: initialServices, canManage }: Servic
       description: formData.get("description") as string,
       duration: Number(formData.get("duration")),
       price: Number(formData.get("price")),
+      depositAmount: formData.get("depositAmount")
+        ? Number(formData.get("depositAmount"))
+        : null,
       color: formData.get("color") as string,
     };
 
@@ -145,6 +149,11 @@ export function ServicesManager({ services: initialServices, canManage }: Servic
                     <DollarSign className="h-3 w-3" />
                     {formatCurrency(service.price)}
                   </span>
+                  {service.depositAmount ? (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      {formatCurrency(service.depositAmount)} deposit
+                    </span>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -174,6 +183,22 @@ export function ServicesManager({ services: initialServices, canManage }: Servic
               <div className="space-y-2">
                 <Label htmlFor="price">Price ($)</Label>
                 <Input id="price" name="price" type="number" min={0} step="0.01" defaultValue={editing?.price ?? 0} required />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="depositAmount">Deposit ($, optional)</Label>
+                <Input
+                  id="depositAmount"
+                  name="depositAmount"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0"
+                  defaultValue={editing?.depositAmount ?? ""}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Charged when customers book online. Leave blank for no
+                  deposit. Requires payouts to be connected in Settings.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="color">Color</Label>
