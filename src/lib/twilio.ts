@@ -71,10 +71,16 @@ export async function sendSms(
 
   try {
     const client = getTwilioClient();
+    // A2P 10DLC: sending via the registered Messaging Service is what
+    // associates traffic with the approved campaign. Fall back to the raw
+    // number when no service is configured (local dev / pre-registration).
+    const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
     const message = await client.messages.create({
       body,
-      from: process.env.TWILIO_PHONE_NUMBER!,
       to: normalizePhone(to),
+      ...(messagingServiceSid
+        ? { messagingServiceSid }
+        : { from: process.env.TWILIO_PHONE_NUMBER! }),
     });
 
     const { default: prisma } = await import("@/lib/db");

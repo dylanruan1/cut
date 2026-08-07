@@ -10,6 +10,8 @@ const publicRoutes = [
   "/verify-email",
   "/invite",
   "/pricing",
+  // Customer-facing booking pages must work without an account.
+  "/book",
   "/api/twilio",
   "/api/health",
   "/api/billing/webhook",

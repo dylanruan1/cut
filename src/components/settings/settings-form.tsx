@@ -12,7 +12,7 @@ import { toast } from "@/hooks/use-toast";
 import { DAYS_OF_WEEK } from "@/lib/dates";
 import { getVoiceWebhookUrl } from "@/lib/voice-webhook";
 import Link from "next/link";
-import { Lock, Sparkles } from "lucide-react";
+import { Lock, Sparkles, Copy, Check, ExternalLink } from "lucide-react";
 
 type PhoneSetupMethod = "NEW_TWILIO" | "FORWARD_EXISTING" | "PORT_TO_TWILIO";
 type PhoneSetupStatus = "NOT_STARTED" | "PENDING" | "CONNECTED" | "ERROR";
@@ -20,6 +20,7 @@ type PhoneSetupStatus = "NOT_STARTED" | "PENDING" | "CONNECTED" | "ERROR";
 interface Shop {
   id: string;
   name: string;
+  slug: string;
   address: string | null;
   phone: string | null;
   instagram: string | null;
@@ -101,10 +102,21 @@ export function SettingsForm({
     shop.phoneSetupMethod ?? ""
   );
 
+  const [copied, setCopied] = useState(false);
+
   const webhookUrl = useMemo(
     () => voiceWebhookUrl || getVoiceWebhookUrl(),
     [voiceWebhookUrl]
   );
+
+  // Built client-side so it always reflects the domain the owner is actually on.
+  const bookingUrl = useMemo(() => {
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : process.env.NEXT_PUBLIC_APP_URL ?? "";
+    return `${origin}/book/${shop.slug}`;
+  }, [shop.slug]);
 
   const connectionStatus: PhoneSetupStatus =
     shop.phoneSetupStatus ??
@@ -176,7 +188,55 @@ export function SettingsForm({
           <TabsTrigger value="hours">Business Hours</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" className="mt-6">
+        <TabsContent value="general" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Your booking link</CardTitle>
+              <CardDescription>
+                Share this so customers can book themselves — put it in your
+                Instagram bio, Google profile, or a text.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input readOnly value={bookingUrl} className="font-mono text-sm" />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(bookingUrl);
+                        setCopied(true);
+                        toast({ title: "Link copied" });
+                        setTimeout(() => setCopied(false), 2000);
+                      } catch {
+                        toast({
+                          title: "Couldn't copy",
+                          description: "Select the link and copy it manually.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    {copied ? (
+                      <Check className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Copy className="mr-2 h-4 w-4" />
+                    )}
+                    {copied ? "Copied" : "Copy"}
+                  </Button>
+                  <Button type="button" variant="ghost" asChild>
+                    <a href={bookingUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Preview
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Shop Information</CardTitle>
