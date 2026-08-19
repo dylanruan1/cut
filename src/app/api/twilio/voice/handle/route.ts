@@ -178,7 +178,7 @@ async function bookAppointment(barbershopId: string, data: SessionData): Promise
   const dateTime = `${formatShortDate(startTime, shop.timezone)} at ${formatTime(startTime, shop.timezone)}`;
   await sendSms(
     phone,
-    buildBookingConfirmationSms(name, service.name, barber.name, dateTime, shop.name),
+    buildBookingConfirmationSms(name, service.name, barber.name, dateTime, shop.name, appointment.manageToken),
     barbershopId,
     "booking_confirmation",
     appointment.id

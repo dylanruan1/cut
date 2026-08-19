@@ -114,7 +114,7 @@ export async function createAppointment(data: unknown) {
   const dateTime = `${formatShortDate(start, user.barbershop.timezone)} at ${formatTime(start, user.barbershop.timezone)}`;
   await sendSms(
     client.phone,
-    buildBookingConfirmationSms(sanitizedName, service.name, barber.name, dateTime, appointment.barbershop.name),
+    buildBookingConfirmationSms(sanitizedName, service.name, barber.name, dateTime, appointment.barbershop.name, appointment.manageToken),
     user.barbershopId,
     "booking_confirmation",
     appointment.id

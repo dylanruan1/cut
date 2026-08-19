@@ -623,7 +623,8 @@ export async function createPublicBooking(
       service.name,
       slot.barberName,
       when,
-      shop.name
+      shop.name,
+      appointment.manageToken
     ),
     shop.id,
     "booking_confirmation",

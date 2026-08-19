@@ -12,6 +12,8 @@ const publicRoutes = [
   "/pricing",
   // Customer-facing booking pages must work without an account.
   "/book",
+  // Token-based appointment management (link sent in confirmation texts).
+  "/appointment",
   // Legal pages are referenced publicly (incl. A2P/carrier review).
   "/privacy",
   "/terms",

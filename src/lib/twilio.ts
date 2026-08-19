@@ -112,14 +112,26 @@ export function normalizePhone(phone: string): string {
   return `+${cleaned}`;
 }
 
+/** Public link letting a customer view or cancel their booking. */
+export function buildManageUrl(manageToken?: string | null): string | null {
+  const token = manageToken?.trim();
+  if (!token) return null;
+  const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (!base) return null;
+  return `${base}/appointment/${token}`;
+}
+
 export function buildBookingConfirmationSms(
   clientName: string,
   serviceName: string,
   barberName: string,
   dateTime: string,
-  shopName: string
+  shopName: string,
+  manageToken?: string | null
 ): string {
-  return `Hi ${clientName}! Your appointment at ${shopName} is confirmed.\n\n${serviceName} with barber ${barberName}\n${dateTime}\n\nReply STOP to opt out.`;
+  const manageUrl = buildManageUrl(manageToken);
+  const manageLine = manageUrl ? `\n\nView or cancel: ${manageUrl}` : "";
+  return `Hi ${clientName}! Your appointment at ${shopName} is confirmed.\n\n${serviceName} with barber ${barberName}\n${dateTime}${manageLine}\n\nReply STOP to opt out.`;
 }
 
 export function buildReminderSms(
@@ -127,10 +139,13 @@ export function buildReminderSms(
   serviceName: string,
   dateTime: string,
   shopName: string,
-  hoursBefore: number
+  hoursBefore: number,
+  manageToken?: string | null
 ): string {
   const timeLabel = hoursBefore === 24 ? "tomorrow" : "in 2 hours";
-  return `Hi ${clientName}! Reminder: Your ${serviceName} at ${shopName} is ${timeLabel} at ${dateTime}. See you soon!`;
+  const manageUrl = buildManageUrl(manageToken);
+  const manageLine = manageUrl ? ` Need to cancel? ${manageUrl}` : "";
+  return `Hi ${clientName}! Reminder: Your ${serviceName} at ${shopName} is ${timeLabel} at ${dateTime}. See you soon!${manageLine}`;
 }
 
 export function buildCancellationSms(

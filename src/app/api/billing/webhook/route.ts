@@ -134,7 +134,8 @@ async function confirmDepositPaid(session: Stripe.Checkout.Session) {
       appointment.service.name,
       appointment.barber.name,
       when,
-      appointment.barbershop.name
+      appointment.barbershop.name,
+      appointment.manageToken
     ),
     appointment.barbershopId,
     "booking_confirmation",

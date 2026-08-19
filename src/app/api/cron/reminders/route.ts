@@ -77,7 +77,8 @@ export async function GET(request: NextRequest) {
         apt.service.name,
         dateTime,
         apt.barbershop.name,
-        24
+        24,
+        apt.manageToken
       ),
       apt.barbershopId,
       "reminder_24h",
@@ -100,7 +101,8 @@ export async function GET(request: NextRequest) {
         apt.service.name,
         dateTime,
         apt.barbershop.name,
-        2
+        2,
+        apt.manageToken
       ),
       apt.barbershopId,
       "reminder_2h",

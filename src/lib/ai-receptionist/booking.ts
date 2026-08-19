@@ -13,6 +13,7 @@ import {
 } from "./availability";
 import { describeBookingForVoice } from "./prompts";
 import { isDoubleBookingError } from "@/lib/booking-conflict";
+import { buildManageUrl } from "@/lib/twilio";
 import { getStripe, getAppUrl } from "@/lib/stripe";
 import { buildDepositCheckoutParams, toCents } from "@/lib/stripe-connect";
 import { sendReceptionistSms } from "./sms";
@@ -486,7 +487,11 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
     to: callerPhone,
     barbershopId: shop.id,
     appointmentId: appointment.id,
-    body: `Hi ${clientName}! Your ${service.name} with barber ${slot.barberName} at ${shop.name} is confirmed for ${spokenWhen}. Reply STOP to opt out.`,
+    body: (() => {
+      const manageUrl = buildManageUrl(appointment.manageToken);
+      const manageLine = manageUrl ? ` View or cancel: ${manageUrl}` : "";
+      return `Hi ${clientName}! Your ${service.name} with barber ${slot.barberName} at ${shop.name} is confirmed for ${spokenWhen}.${manageLine} Reply STOP to opt out.`;
+    })(),
   });
 
   return {
