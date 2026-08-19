@@ -31,9 +31,18 @@ export default async function TeamPage() {
     }),
   ]);
 
+  // Send only whether a PIN exists — never the hash itself.
+  const barbersForClient = barbers.map((barber) => {
+    const { verifyPinHash, ...rest } = barber;
+    return {
+      ...serializeForClient(rest),
+      hasVerifyPin: Boolean(verifyPinHash),
+    };
+  });
+
   return (
     <TeamManager
-      barbers={serializeForClient(barbers)}
+      barbers={barbersForClient}
       invitations={serializeForClient(invitations)}
       canManage={canManageShop(user.role)}
     />

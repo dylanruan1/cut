@@ -143,6 +143,38 @@ async function confirmDepositPaid(session: Stripe.Checkout.Session) {
   );
 }
 
+/**
+ * A walk-in paid by card. Only here does the visit get marked paid — the
+ * client never sets that state itself, so a receipt always means money moved.
+ */
+async function confirmQueuePaid(session: Stripe.Checkout.Session) {
+  const entryId = session.metadata?.queueEntryId;
+  if (!entryId) return;
+
+  const entry = await prisma.queueEntry.findUnique({
+    where: { id: entryId },
+    select: { id: true, paymentMethod: true, barbershopId: true },
+  });
+  if (!entry || entry.paymentMethod !== "UNPAID") return; // idempotent
+
+  await prisma.queueEntry.update({
+    where: { id: entry.id },
+    data: {
+      paymentMethod: "CARD",
+      // Card payments are inherently verified — Stripe moved real money.
+      cashVerified: true,
+      verifiedAt: new Date(),
+      paidAmount: session.amount_total ? session.amount_total / 100 : null,
+      stripePaymentIntentId:
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id ?? null,
+      status: "DONE",
+      completedAt: new Date(),
+    },
+  });
+}
+
 /** Checkout expired without payment — free the slot back up. */
 async function releaseUnpaidHold(session: Stripe.Checkout.Session) {
   const appointmentId = session.metadata?.appointmentId;
@@ -230,6 +262,12 @@ export async function POST(request: NextRequest) {
         // Appointment deposits are a different flow from SaaS subscriptions.
         if (session.metadata?.kind === "appointment_deposit") {
           await confirmDepositPaid(session);
+          break;
+        }
+
+        // Walk-in queue payment taken in the shop.
+        if (session.metadata?.kind === "queue_payment") {
+          await confirmQueuePaid(session);
           break;
         }
 

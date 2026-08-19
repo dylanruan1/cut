@@ -26,6 +26,7 @@ import { inviteTeamMember, removeBarber } from "@/actions/appointments";
 import { toast } from "@/hooks/use-toast";
 import { getInitials, formatPhone } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/empty-state";
+import { BarberPinControl } from "@/components/team/barber-pin-control";
 import {
   Tooltip,
   TooltipContent,
@@ -40,6 +41,8 @@ interface Barber {
   photoUrl: string | null;
   color: string;
   isActive: boolean;
+  /** Whether a cash-verification PIN is set. The PIN itself never leaves the server. */
+  hasVerifyPin?: boolean;
 }
 
 interface Invitation {
@@ -146,20 +149,27 @@ export function TeamManager({ barbers, invitations, canManage }: TeamManagerProp
                 </div>
               </div>
               {canManage && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-4 text-destructive"
-                      onClick={() => handleRemove(barber.id)}
-                    >
-                      <UserMinus className="h-4 w-4 mr-1" />
-                      Remove
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Deactivate this barber for the active shop</TooltipContent>
-                </Tooltip>
+                <>
+                  <BarberPinControl
+                    barberId={barber.id}
+                    barberName={barber.name}
+                    hasPin={Boolean(barber.hasVerifyPin)}
+                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2 text-destructive"
+                        onClick={() => handleRemove(barber.id)}
+                      >
+                        <UserMinus className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Deactivate this barber for the active shop</TooltipContent>
+                  </Tooltip>
+                </>
               )}
             </CardContent>
           </Card>

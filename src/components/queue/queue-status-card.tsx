@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   leaveQueue,
+  markSeated,
   checkOutQueueEntry,
   type QueueStatusView,
 } from "@/actions/queue";
@@ -28,8 +29,11 @@ export function QueueStatusCard({ status }: { status: QueueStatusView }) {
   const [tipPercent, setTipPercent] = useState(20);
   const [payingCash, setPayingCash] = useState(false);
   const [barberPin, setBarberPin] = useState("");
-  const [verifiedBy, setVerifiedBy] = useState<string | undefined>();
-  const [wasVerified, setWasVerified] = useState(false);
+  const [verifiedBy, setVerifiedBy] = useState<string | undefined>(
+    status.verifiedByName
+  );
+  // Seeded from the server so returning from Stripe shows a real receipt.
+  const [wasVerified, setWasVerified] = useState(status.verified);
 
   // Keep the wait estimate honest without the customer refreshing.
   useEffect(() => {
@@ -51,6 +55,15 @@ export function QueueStatusCard({ status }: { status: QueueStatusView }) {
     });
   }
 
+  function onSeated() {
+    setError(null);
+    startTransition(async () => {
+      const res = await markSeated(status.token);
+      if (res.error) return setError(res.error);
+      router.refresh();
+    });
+  }
+
   function onCheckOut(method: "CARD" | "CASH") {
     setError(null);
     startTransition(async () => {
@@ -61,6 +74,11 @@ export function QueueStatusCard({ status }: { status: QueueStatusView }) {
         barberPin: method === "CASH" ? barberPin : undefined,
       });
       if (res.error) return setError(res.error);
+      // Card payments go to Stripe — nothing is marked paid until they return.
+      if (res.checkoutUrl) {
+        window.location.href = res.checkoutUrl;
+        return;
+      }
       setVerifiedBy(res.verifiedBy);
       setWasVerified(Boolean(res.cashVerified));
       setPaid(true);
@@ -304,13 +322,28 @@ export function QueueStatusCard({ status }: { status: QueueStatusView }) {
         </div>
       )}
 
+      <div className="space-y-2">
+        <Button
+          className="w-full"
+          size="lg"
+          disabled={pending}
+          onClick={onSeated}
+        >
+          {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          I&apos;m in the chair
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">
+          Tap this when you sit down — it frees your spot for the next person
+          and lets you pay from your phone.
+        </p>
+      </div>
+
       <Button
         variant="ghost"
         className="w-full"
         disabled={pending}
         onClick={onLeave}
       >
-        {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
         Leave the line
       </Button>
     </div>

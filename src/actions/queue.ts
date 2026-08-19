@@ -7,6 +7,8 @@ import { rateLimit, sanitizeInput } from "@/lib/rate-limit";
 import { normalizePhone, sendSms } from "@/lib/twilio";
 import { canUseCalendar } from "@/lib/subscription";
 import { verifyPin } from "@/lib/barber-pin";
+import { getStripe, getAppUrl } from "@/lib/stripe";
+import { applicationFeeCents, toCents } from "@/lib/stripe-connect";
 import {
   ACTIVE_QUEUE_STATUSES,
   estimateWaitMinutes,
@@ -36,6 +38,67 @@ export type QueueShop = {
   peopleWaiting: number;
   open: boolean;
 };
+
+
+/**
+ * Stripe Checkout for an in-person walk-in payment.
+ *
+ * Destination charge, so the money lands in the barbershop's own account —
+ * Cut only takes its platform fee. The entry is NOT marked paid here; the
+ * webhook does that once Stripe confirms.
+ */
+async function createQueueCheckout(input: {
+  entryId: string;
+  barbershopId: string;
+  connectAccountId: string;
+  shopName: string;
+  shopSlug: string;
+  serviceName: string;
+  token: string;
+  amountDollars: number;
+}): Promise<string> {
+  const stripe = getStripe();
+  if (!stripe) throw new Error("Stripe is not configured");
+
+  const amount = toCents(input.amountDollars);
+  const fee = applicationFeeCents(amount);
+  const base = getAppUrl();
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    success_url: `${base}/q/status/${input.token}?paid=1`,
+    cancel_url: `${base}/q/status/${input.token}`,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: amount,
+          product_data: {
+            name: `${input.serviceName} at ${input.shopName}`,
+          },
+        },
+      },
+    ],
+    payment_intent_data: {
+      ...(fee > 0 ? { application_fee_amount: fee } : {}),
+      transfer_data: { destination: input.connectAccountId },
+      metadata: {
+        queueEntryId: input.entryId,
+        barbershopId: input.barbershopId,
+        kind: "queue_payment",
+      },
+    },
+    metadata: {
+      queueEntryId: input.entryId,
+      barbershopId: input.barbershopId,
+      kind: "queue_payment",
+    },
+  });
+
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+  return session.url;
+}
 
 async function clientKey(prefix: string): Promise<string> {
   const h = await headers();
@@ -263,6 +326,9 @@ export type QueueStatusView = {
   canCheckOut: boolean;
   paid: boolean;
   paymentMethod: string;
+  /** True only when money genuinely moved (card) or a barber confirmed cash. */
+  verified: boolean;
+  verifiedByName?: string;
 };
 
 /** Live status for the customer's own page. */
@@ -301,6 +367,13 @@ export async function getQueueStatus(
     barberIds: barbers.map((b) => b.id),
   });
 
+  const verifier = entry.verifiedByBarberId
+    ? await prisma.barber.findUnique({
+        where: { id: entry.verifiedByBarberId },
+        select: { name: true },
+      })
+    : null;
+
   return {
     token: clean,
     shopName: entry.barbershop.name,
@@ -315,7 +388,72 @@ export async function getQueueStatus(
     canCheckOut: entry.status === "IN_CHAIR",
     paid: entry.paymentMethod !== "UNPAID",
     paymentMethod: entry.paymentMethod,
+    verified: entry.cashVerified,
+    verifiedByName: verifier?.name,
   };
+}
+
+/**
+ * The customer marks themselves as seated.
+ *
+ * Deliberately customer-driven: the barber's hands are full, and the person
+ * sitting down is the one with a phone in their hand. This starts the service
+ * timer (the backstop that keeps the queue moving) and frees their place in
+ * line for whoever is behind them.
+ */
+export async function markSeated(
+  token: string
+): Promise<{ success?: true; error?: string }> {
+  const clean = token?.trim();
+  if (!clean) return { error: "Invalid link." };
+
+  const limited = rateLimit(await clientKey("queue:seat"), 20, 60_000);
+  if (!limited.success) return { error: "Too many requests." };
+
+  const entry = await prisma.queueEntry.findUnique({
+    where: { token: clean },
+    include: { service: { select: { duration: true } } },
+  });
+  if (!entry) return { error: "We couldn't find your spot in line." };
+  if (entry.status === "IN_CHAIR") return { success: true };
+  if (entry.status === "DONE" || entry.status === "LEFT") {
+    return { error: "This visit is already finished." };
+  }
+
+  // If they didn't pick a barber, attribute the visit to whoever is free so
+  // the shop's numbers stay meaningful.
+  let barberId = entry.barberId;
+  if (!barberId) {
+    const busy = await prisma.queueEntry.findMany({
+      where: { barbershopId: entry.barbershopId, status: "IN_CHAIR" },
+      select: { barberId: true },
+    });
+    const busyIds = new Set(busy.map((b) => b.barberId).filter(Boolean));
+    const free = await prisma.barber.findFirst({
+      where: {
+        barbershopId: entry.barbershopId,
+        isActive: true,
+        id: { notIn: [...busyIds] as string[] },
+      },
+      select: { id: true },
+    });
+    barberId = free?.id ?? null;
+  }
+
+  const seatedAt = new Date();
+  await prisma.queueEntry.update({
+    where: { id: entry.id },
+    data: {
+      status: "IN_CHAIR",
+      barberId,
+      seatedAt,
+      autoCompleteAt: autoCompleteAt(seatedAt, entry.service.duration),
+    },
+  });
+
+  await notifyNextInLine(entry.barbershopId);
+  revalidatePath("/dashboard");
+  return { success: true };
 }
 
 /** Customer leaves the line voluntarily. */
@@ -364,6 +502,8 @@ export async function checkOutQueueEntry(input: {
   error?: string;
   cashVerified?: boolean;
   verifiedBy?: string;
+  /** Present for card payments — the client redirects here to actually pay. */
+  checkoutUrl?: string;
 }> {
   const clean = input.token?.trim();
   if (!clean) return { error: "Invalid link." };
@@ -373,7 +513,7 @@ export async function checkOutQueueEntry(input: {
 
   const entry = await prisma.queueEntry.findUnique({
     where: { token: clean },
-    include: { service: { select: { price: true } } },
+    include: { service: { select: { price: true, name: true } } },
   });
   if (!entry) return { error: "We couldn't find your visit." };
   if (entry.paymentMethod !== "UNPAID") return { success: true };
@@ -384,12 +524,53 @@ export async function checkOutQueueEntry(input: {
       : 0;
   const total = Number(entry.service.price) + tip;
 
-  // Card payments are verified by definition — Stripe actually moved money.
-  //
-  // Cash is only verified when a barber at this shop typed their own PIN on
+  // CARD: hand off to Stripe. Nothing is marked paid here — the webhook
+  // confirms it only after money actually moves.
+  if (input.method === "CARD") {
+    const shop = await prisma.barbershop.findUnique({
+      where: { id: entry.barbershopId },
+      select: {
+        name: true,
+        slug: true,
+        connectStatus: true,
+        stripeConnectAccountId: true,
+      },
+    });
+
+    if (
+      !shop?.stripeConnectAccountId ||
+      shop.connectStatus !== "ACTIVE"
+    ) {
+      return {
+        error:
+          "This shop isn't set up to take card payments yet. Please pay your barber directly.",
+      };
+    }
+
+    try {
+      const url = await createQueueCheckout({
+        entryId: entry.id,
+        barbershopId: entry.barbershopId,
+        connectAccountId: shop.stripeConnectAccountId,
+        shopName: shop.name,
+        shopSlug: shop.slug,
+        serviceName: entry.service.name,
+        token: clean,
+        amountDollars: total,
+      });
+      return { success: true, checkoutUrl: url };
+    } catch (error) {
+      console.error("[queue] card checkout failed", error);
+      return {
+        error: "We couldn't start the payment. Please pay your barber directly.",
+      };
+    }
+  }
+
+  // CASH is only verified when a barber at this shop typed their own PIN on
   // the customer's phone. An unverified claim still completes the visit (the
-  // line must keep moving) but it is never rendered as proof of payment.
-  let cashVerified = input.method === "CARD";
+  // line must keep moving) but is never rendered as proof of payment.
+  let cashVerified = false;
   let verifiedByBarberId: string | null = null;
   let verifiedByName: string | undefined;
 
