@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   parseReceptionistMessage,
   processReceptionistMessage,
@@ -298,6 +298,9 @@ describe("blank name can never reach confirmation", () => {
   });
 
   it("executeBooking never stores a blank clientNameSnapshot", async () => {
+    // Freeze time so the fixed booking date stays in the future.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(FIXED_NOW);
     prismaMock.client.findUnique.mockResolvedValue(null);
     prismaMock.client.create.mockResolvedValue({
       id: "client_new",
@@ -306,6 +309,14 @@ describe("blank name can never reach confirmation", () => {
       barbershopId: "shop_1",
     });
     prismaMock.appointment.findMany.mockResolvedValue([]);
+    // No deposits configured in these fixtures.
+    prismaMock.barbershop.findUnique.mockResolvedValue({
+      slug: "shop",
+      depositsEnabled: false,
+      connectStatus: "NOT_CONNECTED",
+      stripeConnectAccountId: null,
+    });
+    prismaMock.service.findUnique.mockResolvedValue({ depositAmount: null });
     prismaMock.appointment.create.mockResolvedValue({
       id: "apt_blank_guard",
       startTime: new Date("2026-07-11T22:00:00.000Z"),
@@ -337,6 +348,7 @@ describe("blank name can never reach confirmation", () => {
     expect(typeof snapshot).toBe("string");
     expect(snapshot.trim().length).toBeGreaterThan(0);
     expect(result.message).not.toMatch(/under the name\s*(for|\.|,|$)/i);
+    vi.useRealTimers();
   });
 });
 
@@ -427,9 +439,18 @@ const prismaMock = vi.hoisted(() => ({
     create: vi.fn(),
     update: vi.fn(),
   },
+  // Deposit lookup: executeBooking checks whether the shop takes deposits and
+  // whether this service requires one.
+  barbershop: {
+    findUnique: vi.fn(),
+  },
+  service: {
+    findUnique: vi.fn(),
+  },
   appointment: {
     findMany: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
   },
   notification: {
     create: vi.fn(),
@@ -450,14 +471,31 @@ vi.mock("@/lib/ai-receptionist/sms", () => ({
 }));
 
 describe("executeBooking caller name vs existing client", () => {
+  // These fixtures book a fixed calendar date. Freeze the clock just before it
+  // so the availability engine's past-time guard doesn't reject the slot once
+  // that date drifts into the past in real life.
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(FIXED_NOW);
     vi.clearAllMocks();
     prismaMock.appointment.findMany.mockResolvedValue([]);
+    // No deposits configured in these fixtures.
+    prismaMock.barbershop.findUnique.mockResolvedValue({
+      slug: "shop",
+      depositsEnabled: false,
+      connectStatus: "NOT_CONNECTED",
+      stripeConnectAccountId: null,
+    });
+    prismaMock.service.findUnique.mockResolvedValue({ depositAmount: null });
     prismaMock.appointment.create.mockResolvedValue({
       id: "apt_1",
       startTime: new Date("2026-07-11T22:00:00.000Z"),
     });
     prismaMock.notification.create.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("preserves Dylan client when same phone books as Jeff; stores Jeff snapshot", async () => {

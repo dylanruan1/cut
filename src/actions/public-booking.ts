@@ -231,10 +231,11 @@ export async function getPublicShop(slug: string): Promise<PublicShop | null> {
       id: b.id,
       name: b.name,
       photoUrl: b.photoUrl,
-      workingHours: b.workingHours,
-      serviceIds: b.services.map((s) => s.serviceId),
+      // Defensive: empty means "no restriction" in findAvailability.
+      workingHours: b.workingHours ?? [],
+      serviceIds: (b.services ?? []).map((s) => s.serviceId),
     })),
-    holidays: shop.holidays.map((h) => ({
+    holidays: (shop.holidays ?? []).map((h) => ({
       date: h.date.toISOString().slice(0, 10),
       isClosed: h.isClosed,
     })),

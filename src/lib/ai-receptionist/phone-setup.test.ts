@@ -78,6 +78,7 @@ const prismaMock = vi.hoisted(() => ({
   service: { findMany: vi.fn() },
   barber: { findMany: vi.fn() },
   businessHour: { findMany: vi.fn() },
+  holiday: { findMany: vi.fn() },
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -142,6 +143,7 @@ describe("unknown Twilio number does not book wrong shop in production", () => {
     prismaMock.service.findMany.mockResolvedValue([]);
     prismaMock.barber.findMany.mockResolvedValue([]);
     prismaMock.businessHour.findMany.mockResolvedValue([]);
+    prismaMock.holiday.findMany.mockResolvedValue([]);
 
     const { resolveShopForTwilioTo } = await import(
       "@/lib/ai-receptionist/shop-resolve"

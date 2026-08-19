@@ -89,8 +89,10 @@ export async function resolveShopForTwilioTo(
       barbers: barbers.map((b) => ({
         id: b.id,
         name: b.name,
-        workingHours: b.workingHours,
-        serviceIds: b.services.map((s) => s.serviceId),
+        // Defensive: a missing relation must never crash an in-progress call.
+        // Empty means "no restriction", matching findAvailability's fallback.
+        workingHours: b.workingHours ?? [],
+        serviceIds: (b.services ?? []).map((s) => s.serviceId),
       })),
       businessHours: businessHours.map((h) => ({
         dayOfWeek: h.dayOfWeek,

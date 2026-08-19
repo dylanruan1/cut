@@ -33,6 +33,9 @@ const prismaMock = vi.hoisted(() => ({
   businessHour: {
     findMany: vi.fn(),
   },
+  holiday: {
+    findMany: vi.fn(),
+  },
   barberService: {
     createMany: vi.fn(),
   },
@@ -138,6 +141,7 @@ describe("Twilio To shop routing", () => {
     ]);
     prismaMock.barber.findMany.mockResolvedValue([{ id: "b_a", name: "Alex" }]);
     prismaMock.businessHour.findMany.mockResolvedValue([]);
+    prismaMock.holiday.findMany.mockResolvedValue([]);
 
     const { resolveShopForTwilioTo } = await import(
       "@/lib/ai-receptionist/shop-resolve"
