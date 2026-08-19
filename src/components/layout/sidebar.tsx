@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Calendar, Users, Settings, LayoutDashboard, Search, Scissors, BarChart3, CreditCard } from "lucide-react";
+import { Calendar, Users, Settings, LayoutDashboard, Search, Scissors, BarChart3, CreditCard, QrCode } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ const navItems = [
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/clients", label: "Clients", icon: Search },
   { href: "/services", label: "Services", icon: Scissors },
+  { href: "/queue-code", label: "Walk-in QR", icon: QrCode },
   { href: "/team", label: "Team", icon: Users },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/settings/billing", label: "Billing", icon: CreditCard },
