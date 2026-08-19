@@ -479,6 +479,56 @@ export async function inviteTeamMember(data: unknown) {
   };
 }
 
+/**
+ * Sets a barber's 4-digit verification PIN.
+ *
+ * They memorise it and type it on a *customer's* phone to confirm cash
+ * payments — no device or app needed at the station. Stored hashed and never
+ * readable again, so a lost PIN is reset rather than looked up.
+ */
+export async function setBarberPin(barberId: string, pin: string) {
+  const user = await requireShopUser();
+  if (!canManageShop(user.role)) return { error: "Unauthorized" };
+
+  const { validatePinFormat, hashPin } = await import("@/lib/barber-pin");
+  const check = validatePinFormat(pin);
+  if (!check.ok) return { error: check.error };
+
+  const barber = await prisma.barber.findFirst({
+    where: { id: barberId, barbershopId: user.barbershopId },
+    select: { id: true },
+  });
+  if (!barber) return { error: "Barber not found" };
+
+  await prisma.barber.update({
+    where: { id: barber.id },
+    data: { verifyPinHash: await hashPin(pin) },
+  });
+
+  revalidatePath("/team");
+  return { success: true };
+}
+
+/** Clears a barber's PIN, disabling cash verification for them. */
+export async function clearBarberPin(barberId: string) {
+  const user = await requireShopUser();
+  if (!canManageShop(user.role)) return { error: "Unauthorized" };
+
+  const barber = await prisma.barber.findFirst({
+    where: { id: barberId, barbershopId: user.barbershopId },
+    select: { id: true },
+  });
+  if (!barber) return { error: "Barber not found" };
+
+  await prisma.barber.update({
+    where: { id: barber.id },
+    data: { verifyPinHash: null },
+  });
+
+  revalidatePath("/team");
+  return { success: true };
+}
+
 export async function removeBarber(barberId: string) {
   const user = await requireShopUser();
   if (!canManageShop(user.role)) return { error: "Unauthorized" };

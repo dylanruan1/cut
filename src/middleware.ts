@@ -14,6 +14,8 @@ const publicRoutes = [
   "/book",
   // Token-based appointment management (link sent in confirmation texts).
   "/appointment",
+  // Walk-in queue: QR landing page and the customer's own status page.
+  "/q",
   // Legal pages are referenced publicly (incl. A2P/carrier review).
   "/privacy",
   "/terms",

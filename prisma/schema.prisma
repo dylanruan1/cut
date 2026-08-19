@@ -64,6 +64,23 @@ enum PhoneSetupStatus {
   ERROR
 }
 
+/// Lifecycle of a walk-in waiting for a chair.
+enum QueueStatus {
+  WAITING
+  NOTIFIED
+  IN_CHAIR
+  DONE
+  LEFT
+}
+
+/// How a completed walk-in paid. Cash is recorded, not processed, so the
+/// queue advances the same way regardless of tender.
+enum PaymentMethod {
+  UNPAID
+  CARD
+  CASH
+}
+
 enum ShopPlan {
   NONE
   STARTER
@@ -126,6 +143,7 @@ model Barbershop {
   notifications            Notification[]
   smsLogs                  SmsLog[]
   receptionistCallSessions ReceptionistCallSession[]
+  queueEntries             QueueEntry[]
 
   @@map("barbershops")
 }
@@ -177,6 +195,10 @@ model Barber {
   photoUrl     String?
   color        String   @default("#007AFF")
   isActive     Boolean  @default(true)
+  /// Bcrypt hash of the barber's 4-digit verification PIN. They memorise it and
+  /// type it on the *customer's* phone to confirm a cash payment — no device or
+  /// app needed at the station. Never stored or returned in plain text.
+  verifyPinHash String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -185,6 +207,7 @@ model Barber {
   workingHours    WorkingHour[]
   services        BarberService[]
   appointments    Appointment[]
+  queueEntries    QueueEntry[]
   favoriteClients Client[]        @relation("FavoriteBarber")
 
   @@index([barbershopId])
@@ -210,6 +233,7 @@ model Service {
   barbershop   Barbershop      @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   barbers      BarberService[]
   appointments Appointment[]
+  queueEntries QueueEntry[]
 
   @@index([barbershopId])
   @@map("services")
@@ -242,6 +266,7 @@ model Client {
   barbershop     Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   favoriteBarber Barber?       @relation("FavoriteBarber", fields: [favoriteBarberId], references: [id], onDelete: SetNull)
   appointments   Appointment[]
+  queueEntries   QueueEntry[]
 
   @@unique([barbershopId, phone])
   @@index([barbershopId, name])
@@ -302,6 +327,66 @@ model Appointment {
   ///     ) WHERE (status <> 'CANCELLED');
   ///
   /// Violations surface as SQLSTATE 23P01; see src/lib/booking-conflict.ts.
+}
+
+/// A walk-in waiting for a chair.
+///
+/// Designed so the queue advances without the barber touching anything:
+/// checkout (card OR cash) completes an entry, and `autoCompleteAt` is a
+/// timer backstop for when nobody taps anything at all.
+model QueueEntry {
+  id           String      @id @default(cuid())
+  barbershopId String
+  /// Set once the walk-in is linked to a known client (returning customer).
+  clientId     String?
+  serviceId    String
+  /// Preferred barber; null means "anyone".
+  barberId     String?
+  name         String
+  phone        String
+  status       QueueStatus @default(WAITING)
+
+  joinedAt     DateTime  @default(now())
+  /// When we texted them that they're nearly up.
+  notifiedAt   DateTime?
+  /// When they actually sat down.
+  seatedAt     DateTime?
+  completedAt  DateTime?
+  /// Timer backstop — past this the entry auto-completes so a cash-paying
+  /// customer who never checks out can't jam the queue.
+  autoCompleteAt DateTime?
+
+  paymentMethod PaymentMethod @default(UNPAID)
+  /// Amount actually collected (card or recorded cash), in dollars.
+  paidAmount    Decimal?      @db.Decimal(10, 2)
+  tipAmount     Decimal?      @db.Decimal(10, 2)
+  stripePaymentIntentId String?
+  /// False when someone self-reported cash without a barber confirming it.
+  /// The visit still completes (the line must keep moving) but is flagged for
+  /// the shop's end-of-day reconciliation and never rendered as a receipt.
+  cashVerified  Boolean       @default(false)
+  /// Which barber entered their PIN to confirm the cash, and when. Present
+  /// only for genuinely verified payments — this is what the customer's screen
+  /// displays, so it can't be reached by tapping alone.
+  verifiedByBarberId String?
+  verifiedAt         DateTime?
+
+  /// Unguessable token for the customer's own status/checkout page.
+  token        String   @unique @default(cuid())
+  /// Links back to the appointment created when they're seated, if any.
+  appointmentId String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  service    Service    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  barber     Barber?    @relation(fields: [barberId], references: [id], onDelete: SetNull)
+  client     Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([barbershopId, status, joinedAt])
+  @@index([barbershopId, joinedAt])
+  @@map("queue_entries")
 }
 
 model BusinessHour {
