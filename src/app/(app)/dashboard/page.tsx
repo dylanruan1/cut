@@ -2,10 +2,15 @@ import { requireActiveSubscription } from "@/lib/subscription-guards";
 import { getDashboardData } from "@/actions/appointments";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { formatDate } from "@/lib/dates";
+import { getSetupChecklist } from "@/lib/setup-checklist";
+import { SetupChecklistCard } from "@/components/dashboard/setup-checklist";
 
 export default async function DashboardPage() {
   const { user } = await requireActiveSubscription();
-  const data = await getDashboardData();
+  const [data, checklist] = await Promise.all([
+    getDashboardData(),
+    getSetupChecklist(user.barbershopId),
+  ]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -17,6 +22,7 @@ export default async function DashboardPage() {
           {formatDate(new Date(), user.barbershop.timezone)} · {user.barbershop.name}
         </p>
       </div>
+      <SetupChecklistCard checklist={checklist} />
       <DashboardContent data={data} timezone={user.barbershop.timezone} />
     </div>
   );
