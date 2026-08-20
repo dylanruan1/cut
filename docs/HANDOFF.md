@@ -1,7 +1,7 @@
 # Cut — Project Handoff
 
 Snapshot for continuing work in another AI assistant (ChatGPT, Cursor agent, etc.).
-Last updated: August 7, 2026.
+Last updated: August 19, 2026.
 
 ---
 
@@ -41,6 +41,9 @@ Live: `https://4u5y3i5befigbaeighasbfghiasbifsbifg.vercel.app`
 | Phone webhooks | `src/app/api/twilio/voice/route.ts`, `voice/process/route.ts` |
 | Public booking | `src/actions/public-booking.ts`, `src/app/book/[slug]/page.tsx`, `src/components/booking/booking-wizard.tsx` |
 | Payments | `src/lib/stripe.ts`, `src/lib/stripe-connect.ts`, `src/actions/connect.ts`, `src/app/api/billing/webhook/route.ts` |
+| Walk-in queue | `src/lib/queue.ts` (pure maths), `src/actions/queue.ts`, `src/app/q/[slug]`, `src/app/q/status/[token]`, `src/app/(app)/queue-code` (printable QR) |
+| Cash verification | `src/lib/barber-pin.ts`, `src/components/team/barber-pin-control.tsx` |
+| Customer self-service | `src/actions/manage-booking.ts`, `src/lib/cancellation-policy.ts`, `src/app/appointment/[token]` |
 | Schema | `prisma/schema.prisma` |
 
 ### Useful commands
@@ -69,7 +72,20 @@ npm run simulate-call en|es      # simulate a real phone call against production
 - **Availability correctness** — barber working hours, holidays, service eligibility,
   past-time guard. 15 unit tests in `src/lib/ai-receptionist/availability.test.ts`.
 - **Double-booking prevention** — Postgres exclusion constraint (see §5).
+- **Customer self-service cancellation** — tokenised link at `/appointment/[token]`
+  sent in confirmation texts. Deposits auto-refund when cancelling 24h+ ahead
+  (reverses the transfer and the platform fee); inside 24h the shop keeps it.
+- **Walk-in queue** — QR sign → customer joins → live wait/position → "I'm in the
+  chair" → checkout. Verified end to end including a real Stripe payment.
+  Per-barber lines are calculated separately, so someone waiting for one barber
+  sees their place in *that* line.
+- **Cash verification without a device** — the barber memorises a 4-digit PIN
+  (bcrypt-hashed) and types it on the *customer's* phone. Verified cash shows a
+  receipt naming who confirmed it; unverified cash shows an amber "due" screen
+  that is deliberately useless as fake proof, and still completes the visit so
+  the line never jams.
 - **Sentry**, **privacy/terms pages**, **deploys on push**.
+- ~217 tests passing across 16 files.
 
 ### Blocked (not a code problem)
 - **All SMS** — Twilio A2P 10DLC campaign is **In review**. Carriers block every
@@ -79,9 +95,13 @@ npm run simulate-call en|es      # simulate a real phone call against production
 
 ### Known broken / missing
 1. **Google OAuth** — `redirect_uri_mismatch`, never resolved. Email/password works.
-2. **No customer self-serve cancel/reschedule** — they must call the shop.
+2. **No self-serve *reschedule*** — cancellation is built; changing the time still
+   means calling the shop.
 3. **Notifications bell** — "coming soon" tooltip, not implemented.
 4. **No reviews / retention texts** — planned, not built.
+4b. **No shop-facing queue screen** — deliberate. The queue is driven entirely by
+   the customer's phone so no device is needed at the station. A read-only view
+   for the front desk would be a nice-to-have, not a requirement.
 5. **No barber time-off / vacation UI** — schema supports working hours; no editor.
 6. **Analytics page** — exists but never verified to compute correct numbers.
 7. **Vercel Hobby** — cron limited to once daily, so reminders can't fire on a
@@ -159,9 +179,23 @@ without understanding the others.
 barbershop's connected Stripe account, never Cut's. Do not change this to charge
 the platform account; that's a money-transmission problem, not just a code choice.
 
-**Never trust the client** in `src/actions/public-booking.ts` — it's the only
-unauthenticated surface. Availability is always recomputed server-side at write
-time, deposits are re-read from the DB, and everything is rate limited per IP.
+**Never trust the client** in `src/actions/public-booking.ts` and
+`src/actions/queue.ts` — these are the unauthenticated surfaces. Availability is
+always recomputed server-side at write time, deposits and payment eligibility are
+re-read from the DB, and everything is rate limited per IP.
+
+**The app must never certify a payment it can't verify.** A card payment is only
+marked paid by the Stripe webhook — never by the browser. Self-reported cash is
+marked *unverified* and rendered as "amount due", never as a receipt. This is
+deliberate: an official-looking "paid" screen the customer can produce by tapping
+is worse than no app at all, because they can wave it at the barber on the way
+out. Don't "simplify" this by trusting the client.
+
+**The queue must never require barber input.** Every mechanism has a fallback:
+the customer marks themselves seated, checkout (cash *or* card) completes a
+visit, and an `autoCompleteAt` timer closes anything left hanging. If you add a
+step that only a barber can perform, the line will jam in a busy shop — which is
+exactly when it matters.
 
 ---
 
@@ -179,9 +213,9 @@ Roughly easiest → hardest. Anything here is safe to hand to another assistant.
 5. Verify the Analytics page math against real appointment data.
 
 **Medium**
-6. **Customer self-serve cancel/reschedule.** Add a tokenized link
-   (`/appointment/[token]`) included in confirmation texts. Biggest support-load
-   reducer for shops. Needs a token field on Appointment.
+6. **Self-serve reschedule.** Cancellation is done; reschedule is the other half
+   and is better for the shop (keeps the booking and the deposit). Reuse
+   `/appointment/[token]` and the availability engine.
 7. **Fix Google OAuth.** Create a fresh Google Cloud OAuth client; add ONLY
    `https://itsmifeefsxjudefrtke.supabase.co/auth/v1/callback` as the redirect URI
    and `http://localhost:3000` as a JS origin; paste the new client ID/secret into
