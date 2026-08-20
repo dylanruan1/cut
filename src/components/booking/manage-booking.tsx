@@ -7,6 +7,7 @@ import {
   type ManagedAppointment,
 } from "@/actions/manage-booking";
 import { FREE_CANCELLATION_HOURS } from "@/lib/cancellation-policy";
+import { ReschedulePanel } from "@/components/booking/reschedule-panel";
 import {
   CalendarDays,
   Check,
@@ -23,6 +24,8 @@ export function ManageBooking({
   appointment: ManagedAppointment;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [movedTo, setMovedTo] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(
     appointment.status === "CANCELLED"
   );
@@ -42,6 +45,38 @@ export function ManageBooking({
       setCancelled(true);
       setConfirming(false);
     });
+  }
+
+  if (movedTo) {
+    return (
+      <div className="rounded-2xl border bg-card p-8 text-center shadow-card">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+          <Check className="h-7 w-7 text-primary" />
+        </div>
+        <h2 className="text-2xl font-semibold tracking-tight">
+          Appointment moved
+        </h2>
+        <p className="mt-2 text-muted-foreground">
+          You&apos;re now booked for {movedTo}.
+        </p>
+        <p className="mt-4 text-sm text-muted-foreground">
+          We&apos;ve let {appointment.shopName} know.
+        </p>
+      </div>
+    );
+  }
+
+  if (rescheduling) {
+    return (
+      <ReschedulePanel
+        token={appointment.token}
+        onDone={(when) => {
+          setRescheduling(false);
+          setMovedTo(when);
+        }}
+        onCancel={() => setRescheduling(false)}
+      />
+    );
   }
 
   if (cancelled) {
@@ -132,17 +167,19 @@ export function ManageBooking({
             </div>
           )}
           <Button
+            className="w-full"
+            size="lg"
+            onClick={() => setRescheduling(true)}
+          >
+            Reschedule
+          </Button>
+          <Button
             variant="outline"
             className="w-full"
             onClick={() => setConfirming(true)}
           >
             Cancel appointment
           </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            Need a different time? Call the shop
-            {appointment.shopPhone ? ` at ${appointment.shopPhone}` : ""} to
-            reschedule.
-          </p>
         </div>
       ) : (
         <div className="space-y-3 rounded-2xl border bg-card p-6">
