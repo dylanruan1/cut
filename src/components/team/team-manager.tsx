@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Mail, Phone, UserMinus, Users } from "lucide-react";
+import { Plus, Mail, Phone, UserMinus, Users, Copy, Check } from "lucide-react";
 import { inviteTeamMember, removeBarber } from "@/actions/appointments";
 import { toast } from "@/hooks/use-toast";
 import { getInitials, formatPhone } from "@/lib/utils";
@@ -51,6 +51,8 @@ interface Invitation {
   role: string;
   status: string;
   expiresAt: string;
+  /** Used to rebuild the invite link. Cut sends no email, so this must stay visible. */
+  token: string;
 }
 
 interface TeamManagerProps {
@@ -76,9 +78,12 @@ export function TeamManager({ barbers, invitations, canManage }: TeamManagerProp
     if (result?.error) {
       toast({ title: "Error", description: result.error, variant: "destructive" });
     } else {
+      // Deliberately does NOT say "sent" — Cut has no email service, so nothing
+      // was delivered. The link now lives in the Pending list, where it can be
+      // copied at any time.
       toast({
-        title: "Invitation sent",
-        description: `Share this link: ${result.inviteUrl}`,
+        title: "Invite link created",
+        description: "Copy it from the Pending list below and send it to them.",
       });
       setDialogOpen(false);
       window.location.reload();
@@ -177,20 +182,29 @@ export function TeamManager({ barbers, invitations, canManage }: TeamManagerProp
         )}
       </div>
 
-      {invitations.length > 0 && (
+      {/* Gated on canManage: the link below is a working credential — anyone
+          holding it can create an account on this shop. */}
+      {canManage && invitations.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Pending Invitations</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Cut doesn&apos;t email these. Copy each link and send it to the
+              person yourself — by text, WhatsApp, or however you reach them.
+            </p>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {invitations.map((inv) => (
-                <div key={inv.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/30">
-                  <div>
-                    <p className="text-sm font-medium">{inv.email}</p>
-                    <p className="text-xs text-muted-foreground">{inv.role}</p>
+                <div key={inv.id} className="rounded-xl bg-muted/30 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{inv.email}</p>
+                      <p className="text-xs text-muted-foreground">{inv.role}</p>
+                    </div>
+                    <Badge variant="warning">Pending</Badge>
                   </div>
-                  <Badge variant="warning">Pending</Badge>
+                  <CopyInviteLink token={inv.token} />
                 </div>
               ))}
             </div>
@@ -228,6 +242,65 @@ export function TeamManager({ barbers, invitations, canManage }: TeamManagerProp
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * The invite link, always visible and copyable.
+ *
+ * Built from window.location.origin rather than NEXT_PUBLIC_APP_URL, because
+ * that env var has been wrong before (it pointed at a dead ngrok tunnel) and a
+ * broken invite link is invisible until someone complains.
+ */
+function CopyInviteLink({ token }: { token: string }) {
+  const [copied, setCopied] = useState(false);
+  const [url, setUrl] = useState("");
+
+  // window isn't available during server rendering.
+  useEffect(() => {
+    setUrl(`${window.location.origin}/invite/${token}`);
+  }, [token]);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({
+        title: "Couldn't copy",
+        description: "Select the link and copy it manually.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2">
+      <code className="flex-1 truncate rounded-lg border bg-background px-2 py-1.5 text-xs text-muted-foreground">
+        {url || "…"}
+      </code>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={copy}
+        disabled={!url}
+        className="shrink-0"
+      >
+        {copied ? (
+          <>
+            <Check className="mr-1.5 h-3.5 w-3.5" />
+            Copied
+          </>
+        ) : (
+          <>
+            <Copy className="mr-1.5 h-3.5 w-3.5" />
+            Copy link
+          </>
+        )}
+      </Button>
     </div>
   );
 }
