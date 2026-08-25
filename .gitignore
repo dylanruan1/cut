@@ -15,6 +15,11 @@ dist/
 .env.development.local
 .env.test.local
 .env.production.local
+# Backups written by scripts/update-db-password.mjs. These hold the PREVIOUS
+# credentials in plaintext, so an unignored *.bak is a leaked secret waiting for
+# someone to run `git add -A`.
+.env*.bak
+*.env.bak
 
 # Debug
 npm-debug.log*

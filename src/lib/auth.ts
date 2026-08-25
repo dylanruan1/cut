@@ -41,16 +41,52 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
   if (!user) return null;
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    include: {
-      barbershop: {
-        select: { id: true, name: true, slug: true, timezone: true },
-      },
+  const userInclude = {
+    barbershop: {
+      select: { id: true, name: true, slug: true, timezone: true },
     },
+  } as const;
+
+  let dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: userInclude,
   });
 
-  if (!dbUser) return null;
+  /**
+   * Heal an orphaned account.
+   *
+   * Signup creates the Supabase auth user first, then this app row separately.
+   * If the second step fails — a database blip, a deploy mid-signup — the
+   * person ends up permanently stuck: their email is taken so they cannot sign
+   * up again, and returning null here bounces them back to the login page in a
+   * loop with nothing explaining why.
+   *
+   * Recreating the row from the auth record they already hold a valid session
+   * for costs one insert and removes that dead end entirely.
+   */
+  if (!dbUser) {
+    const email = user.email;
+    if (!email) return null;
+
+    try {
+      dbUser = await prisma.user.create({
+        data: {
+          id: user.id,
+          email,
+          name:
+            (user.user_metadata?.name as string | undefined)?.trim() || null,
+          role: UserRole.OWNER,
+          // Null until onboarding, which is exactly where they'll be sent.
+          barbershopId: null,
+        },
+        include: userInclude,
+      });
+      console.warn("[auth] recreated missing app user row", { id: user.id });
+    } catch (err) {
+      console.error("[auth] could not heal missing user row", err);
+      return null;
+    }
+  }
 
   await ensureMembershipForUser({
     id: dbUser.id,

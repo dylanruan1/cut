@@ -178,14 +178,37 @@ export function buildNoShowFollowupSms(
   return `Hi ${clientName}, we missed you at ${shopName} today. We'd love to reschedule! Call ${shopPhone} or reply to book.`;
 }
 
+/**
+ * Verifies an inbound Twilio webhook signature.
+ *
+ * Accepts a second token so auth-token rotation causes no downtime. Twilio
+ * signs webhooks with the **primary** token only, so during a handover the
+ * secondary token is not yet valid for signatures. Swapping the app over before
+ * promoting therefore breaks every inbound call — the request fails validation
+ * and the caller is hung up on.
+ *
+ * With both configured the sequence is safe in either order:
+ *   1. Create a secondary token in Twilio, set TWILIO_AUTH_TOKEN_SECONDARY.
+ *   2. Promote it in Twilio. Signatures switch over; the secondary now matches.
+ *   3. Move the value into TWILIO_AUTH_TOKEN and clear the secondary.
+ */
 export function validateTwilioSignature(
   url: string,
   params: Record<string, string>,
   signature: string
 ): boolean {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (!authToken || authToken.startsWith("your-")) return false;
-  return twilio.validateRequest(authToken, signature, url, params);
+  const candidates = [
+    process.env.TWILIO_AUTH_TOKEN,
+    process.env.TWILIO_AUTH_TOKEN_SECONDARY,
+  ].filter(
+    (token): token is string => Boolean(token?.trim()) && !token!.startsWith("your-")
+  );
+
+  if (candidates.length === 0) return false;
+
+  return candidates.some((token) =>
+    twilio.validateRequest(token, signature, url, params)
+  );
 }
 
 export function generateTwimlResponse(content: string): string {
