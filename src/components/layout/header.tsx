@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Moon, Sun, Bell, LogOut, Scissors } from "lucide-react";
+import { Menu, Moon, Sun, LogOut, Scissors } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -22,6 +22,7 @@ import {
   type ShopMembershipOption,
 } from "@/components/layout/shop-switcher";
 import { DevTestShopButton } from "@/components/layout/dev-test-shop-button";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
 import {
   Tooltip,
   TooltipContent,
@@ -38,6 +39,8 @@ interface HeaderProps {
   showDevTools?: boolean;
   hasTestShop2?: boolean;
   showBilling?: boolean;
+  /** Unread count, resolved on the server so the badge is right on first paint. */
+  unreadNotifications?: number;
 }
 
 export function Header({
@@ -50,6 +53,7 @@ export function Header({
   showDevTools = false,
   hasTestShop2 = false,
   showBilling = true,
+  unreadNotifications = 0,
 }: HeaderProps) {
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
@@ -151,14 +155,7 @@ export function Header({
         <TooltipContent>Toggle theme</TooltipContent>
       </Tooltip>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Notifications" disabled>
-            <Bell className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Notifications coming soon</TooltipContent>
-      </Tooltip>
+      <NotificationsBell initialUnread={unreadNotifications} />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

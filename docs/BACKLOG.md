@@ -20,7 +20,7 @@ Legend: **P0** = blocks a real shop using Cut · **P1** = visibly unfinished ·
 | # | Item | Why it matters |
 |---|------|----------------|
 | 2 | **Walk new-shop onboarding end to end** | signup → create shop → services → barbers → hours → payouts → first booking has *never* been tested by a genuinely new user. Highest-risk untested path, and it's the first thing a real shop touches. |
-| 3 | **Verify analytics math** | Page exists but nobody has confirmed the numbers are correct. Wrong numbers in front of an owner are worse than no numbers. |
+| 3 | ~~**Verify analytics math**~~ *(fixed)* | Revenue required status COMPLETED, which nothing ever sets, so it read $0 forever. Now counts appointments that happened and weren't cancelled, plus paid walk-ins, with month boundaries in the shop's timezone rather than the server's. |
 | 4 | ~~**Reminder cron can't run on time**~~ *(fixed)* | The job asked for appointments in a ±15min window exactly 24h/2h out, so a once-daily run texted almost nobody. Now uses wide windows (12–36h and 0–12h) with wording derived from the real time remaining, so one daily run covers everyone. Running it more often only makes it more precise. Optional upgrade: a free external cron (cron-job.org) hitting `/api/cron/reminders` with the `CRON_SECRET` bearer token every 15 min for closer same-day timing. |
 | 5 | **Rotate exposed credentials** | Anthropic, Twilio, GitHub keys appeared in screenshots. Supabase DB password is weak and was visible. |
 
@@ -30,8 +30,8 @@ Legend: **P0** = blocks a real shop using Cut · **P1** = visibly unfinished ·
 
 | # | Item | Notes |
 |---|------|-------|
-| 6 | **Self-serve reschedule** | Cancellation is built; moving an appointment still means calling. Better for the shop than a cancel — keeps the booking *and* the deposit. Reuses `/appointment/[token]` + availability engine. |
-| 7 | **Notifications bell** | Literally says "coming soon" (`header.tsx:160`). The `Notification` model is already populated by bookings — just needs a dropdown. |
+| 6 | ~~**Self-serve reschedule**~~ *(done)* | Built on `/appointment/[token]`; the deposit moves with the booking. |
+| 7 | ~~**Notifications bell**~~ *(done)* | Wired to the existing `Notification` rows — 51 had accumulated unread. Server-rendered badge count, list loads on open, opening marks read (scoped by shop id). |
 | 8 | **Google OAuth** | `redirect_uri_mismatch`, unresolved since the original handoff. Signup is email/password only. |
 | 9 | **Barber time-off / working-hours editor** | Schema supports it and availability already enforces it — there's just no UI to set it. |
 | 10 | **Mobile polish** | Barbers will use this on a phone. Only the customer-facing pages were designed mobile-first. |

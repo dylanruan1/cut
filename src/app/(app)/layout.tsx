@@ -41,6 +41,14 @@ export default async function AppLayout({
     : null;
   const pendingDeletionAt = shopForDeletion?.deletionRequestedAt ?? null;
 
+  // Resolved here rather than in the bell itself, so the badge is correct on
+  // first paint instead of popping in after a client fetch.
+  const unreadNotifications = user?.barbershopId
+    ? await prisma.notification.count({
+        where: { barbershopId: user.barbershopId, isRead: false },
+      })
+    : 0;
+
   return (
     <div className="flex min-h-screen">
       <Sidebar
@@ -61,6 +69,7 @@ export default async function AppLayout({
           showDevTools={showDevTools}
           hasTestShop2={hasTestShop2}
           showBilling={showBilling}
+          unreadNotifications={unreadNotifications}
         />
         <main id="main" className="flex-1 p-4 lg:p-6 overflow-auto">
           {pendingDeletionAt && (
