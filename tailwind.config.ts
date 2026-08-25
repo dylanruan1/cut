@@ -11,15 +11,17 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
+        // Loaded via next/font in src/app/layout.tsx. The system fallbacks are
+        // only for the brief moment before the webfont lands.
         sans: [
+          "var(--font-sans)",
           "-apple-system",
           "BlinkMacSystemFont",
-          "SF Pro Display",
-          "SF Pro Text",
-          "Helvetica Neue",
-          "Arial",
+          "Segoe UI",
+          "Roboto",
           "sans-serif",
         ],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",

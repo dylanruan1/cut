@@ -10,14 +10,18 @@
     --card-foreground: 0 0% 9%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 9%;
-    --primary: 211 100% 50%;
+    /* 100% saturation reads as the stock "AI app" blue. Pulled back to 74% so
+       it looks chosen rather than defaulted. Same hue, so nothing else moves. */
+    --primary: 211 74% 46%;
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96%;
     --muted-foreground: 0 0% 45%;
-    --accent: 211 100% 50%;
-    --accent-foreground: 0 0% 100%;
+    /* Previously identical to --primary, which made this token meaningless.
+       Now a quiet tinted surface for hover and selected states. */
+    --accent: 211 30% 94%;
+    --accent-foreground: 211 60% 22%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 90%;
@@ -33,14 +37,14 @@
     --card-foreground: 0 0% 95%;
     --popover: 0 0% 10%;
     --popover-foreground: 0 0% 95%;
-    --primary: 211 100% 55%;
+    --primary: 211 72% 56%;
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 15%;
     --secondary-foreground: 0 0% 95%;
     --muted: 0 0% 15%;
     --muted-foreground: 0 0% 60%;
-    --accent: 211 100% 55%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 211 22% 20%;
+    --accent-foreground: 211 40% 88%;
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 18%;
@@ -75,5 +79,13 @@
 
   .text-balance {
     text-wrap: balance;
+  }
+
+  /* Money, times, wait estimates and counters. Proportional digits change
+     width as the value changes, so a ticking wait time or a price column
+     visibly jitters. Tabular figures keep every digit the same width. */
+  .nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
   }
 }

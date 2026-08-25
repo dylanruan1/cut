@@ -5,6 +5,9 @@ import { loadShopSubscription } from "@/lib/subscription-guards";
 import { isStripeConfigured } from "@/lib/stripe";
 import { PricingCards } from "@/components/billing/pricing-cards";
 import { canManageShop } from "@/lib/auth";
+import prisma from "@/lib/db";
+import { DeletionBanner } from "@/components/settings/deletion-banner";
+import { daysUntilPurge } from "@/lib/account-deletion";
 
 export default async function PricingPage({
   searchParams,
@@ -16,10 +19,21 @@ export default async function PricingPage({
   let currentPlan: "NONE" | "STARTER" | "PRO" | "AI_RECEPTIONIST" = "NONE";
   let canCheckout = false;
 
+  // Requesting deletion cancels the subscription, which bounces every app page
+  // here. Without the banner on this page the owner would have no reachable
+  // way to undo, so the Undo control has to live here too.
+  let pendingDeletionAt: Date | null = null;
+
   if (user?.barbershopId) {
     const shop = await loadShopSubscription(user.barbershopId);
     currentPlan = shop.plan;
     canCheckout = canManageShop(user.role);
+
+    const deletion = await prisma.barbershop.findUnique({
+      where: { id: user.barbershopId },
+      select: { deletionRequestedAt: true },
+    });
+    pendingDeletionAt = deletion?.deletionRequestedAt ?? null;
   } else if (user) {
     canCheckout = false;
   }
@@ -35,6 +49,12 @@ export default async function PricingPage({
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background">
       <div className="mx-auto max-w-6xl px-4 py-12 md:py-16 space-y-12 animate-fade-in">
+        {pendingDeletionAt && (
+          <DeletionBanner
+            daysLeft={daysUntilPurge(pendingDeletionAt)}
+            canUndo={canCheckout}
+          />
+        )}
         <div className="flex items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center">

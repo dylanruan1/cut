@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { sendSms, buildReminderSms } from "@/lib/twilio";
-import { formatTime } from "@/lib/dates";
 import { getAppointmentClientName } from "@/lib/utils";
+import {
+  reminderWindow,
+  describeWhen,
+  REMINDER_LOG_TYPE,
+  type ReminderKind,
+} from "@/lib/reminders";
+import {
+  purgeDeletedAccounts,
+  type PurgeResult,
+} from "@/lib/purge-deleted-accounts";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -21,18 +30,13 @@ export async function GET(request: NextRequest) {
   }
 
   const now = new Date();
-  const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const in2Hours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  const dayBefore = reminderWindow("day_before", now);
+  const sameDay = reminderWindow("same_day", now);
 
-  const window24Start = new Date(in24Hours.getTime() - 15 * 60 * 1000);
-  const window24End = new Date(in24Hours.getTime() + 15 * 60 * 1000);
-  const window2Start = new Date(in2Hours.getTime() - 15 * 60 * 1000);
-  const window2End = new Date(in2Hours.getTime() + 15 * 60 * 1000);
-
-  const [appointments24h, appointments2h] = await Promise.all([
+  const [appointmentsDayBefore, appointmentsSameDay] = await Promise.all([
     prisma.appointment.findMany({
       where: {
-        startTime: { gte: window24Start, lte: window24End },
+        startTime: { gte: dayBefore.start, lt: dayBefore.end },
         status: { in: ["CONFIRMED", "PENDING"] },
         // Never remind someone whose deposit was never paid.
         NOT: { depositStatus: "PENDING" },
@@ -41,7 +45,7 @@ export async function GET(request: NextRequest) {
     }),
     prisma.appointment.findMany({
       where: {
-        startTime: { gte: window2Start, lte: window2End },
+        startTime: { gte: sameDay.start, lt: sameDay.end },
         status: { in: ["CONFIRMED", "PENDING"] },
         NOT: { depositStatus: "PENDING" },
       },
@@ -63,57 +67,67 @@ export async function GET(request: NextRequest) {
 
   const sent: string[] = [];
 
-  for (const apt of appointments24h) {
-    const existing = await prisma.smsLog.findFirst({
-      where: { appointmentId: apt.id, type: "reminder_24h" },
-    });
-    if (existing) continue;
+  /**
+   * Sends one reminder per appointment per kind.
+   *
+   * The smsLog check is the only thing preventing duplicates, so it stays
+   * inside the loop and runs before every send. Running this endpoint more
+   * often must never mean texting the same person twice.
+   */
+  async function sendReminders(
+    appointments: typeof appointmentsDayBefore,
+    kind: ReminderKind
+  ) {
+    const logType = REMINDER_LOG_TYPE[kind];
+    for (const apt of appointments) {
+      const existing = await prisma.smsLog.findFirst({
+        where: { appointmentId: apt.id, type: logType },
+      });
+      if (existing) continue;
 
-    const dateTime = formatTime(apt.startTime, apt.barbershop.timezone);
-    await sendSms(
-      apt.clientPhoneSnapshot ?? apt.client.phone,
-      buildReminderSms(
-        getAppointmentClientName(apt),
-        apt.service.name,
-        dateTime,
-        apt.barbershop.name,
-        24,
-        apt.manageToken
-      ),
-      apt.barbershopId,
-      "reminder_24h",
-      apt.id
-    );
-    sent.push(`24h:${apt.id}`);
+      const whenLabel = describeWhen(
+        apt.startTime,
+        now,
+        apt.barbershop.timezone
+      );
+      await sendSms(
+        apt.clientPhoneSnapshot ?? apt.client.phone,
+        buildReminderSms(
+          getAppointmentClientName(apt),
+          apt.service.name,
+          apt.barbershop.name,
+          whenLabel,
+          apt.manageToken
+        ),
+        apt.barbershopId,
+        logType,
+        apt.id
+      );
+      sent.push(`${logType}:${apt.id}`);
+    }
   }
 
-  for (const apt of appointments2h) {
-    const existing = await prisma.smsLog.findFirst({
-      where: { appointmentId: apt.id, type: "reminder_2h" },
-    });
-    if (existing) continue;
+  await sendReminders(appointmentsDayBefore, "day_before");
+  await sendReminders(appointmentsSameDay, "same_day");
 
-    const dateTime = formatTime(apt.startTime, apt.barbershop.timezone);
-    await sendSms(
-      apt.clientPhoneSnapshot ?? apt.client.phone,
-      buildReminderSms(
-        getAppointmentClientName(apt),
-        apt.service.name,
-        dateTime,
-        apt.barbershop.name,
-        2,
-        apt.manageToken
-      ),
-      apt.barbershopId,
-      "reminder_2h",
-      apt.id
-    );
-    sent.push(`2h:${apt.id}`);
+  // Piggybacks on this job rather than taking its own schedule, because the
+  // Vercel Hobby plan allows only one cron. Failures here must not stop the
+  // reminders above from being reported as sent.
+  let purge: PurgeResult | { failed: string };
+  try {
+    purge = await purgeDeletedAccounts(now);
+    if (purge.errors.length > 0) {
+      console.error("[cron/reminders] purge errors", purge.errors);
+    }
+  } catch (err) {
+    console.error("[cron/reminders] purge threw", err);
+    purge = { failed: String(err) };
   }
 
   return NextResponse.json({
     sent,
     count: sent.length,
     releasedHolds: releasedHolds.count,
+    purge,
   });
 }

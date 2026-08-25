@@ -21,7 +21,7 @@ Legend: **P0** = blocks a real shop using Cut · **P1** = visibly unfinished ·
 |---|------|----------------|
 | 2 | **Walk new-shop onboarding end to end** | signup → create shop → services → barbers → hours → payouts → first booking has *never* been tested by a genuinely new user. Highest-risk untested path, and it's the first thing a real shop touches. |
 | 3 | **Verify analytics math** | Page exists but nobody has confirmed the numbers are correct. Wrong numbers in front of an owner are worse than no numbers. |
-| 4 | **Reminder cron can't run on time** | Vercel Hobby caps cron at once daily, so 24h/2h reminders can't fire correctly. Fix: upgrade, or free external cron (cron-job.org) hitting `/api/cron/reminders` with the `CRON_SECRET` bearer token. |
+| 4 | ~~**Reminder cron can't run on time**~~ *(fixed)* | The job asked for appointments in a ±15min window exactly 24h/2h out, so a once-daily run texted almost nobody. Now uses wide windows (12–36h and 0–12h) with wording derived from the real time remaining, so one daily run covers everyone. Running it more often only makes it more precise. Optional upgrade: a free external cron (cron-job.org) hitting `/api/cron/reminders` with the `CRON_SECRET` bearer token every 15 min for closer same-day timing. |
 | 5 | **Rotate exposed credentials** | Anthropic, Twilio, GitHub keys appeared in screenshots. Supabase DB password is weak and was visible. |
 
 ---

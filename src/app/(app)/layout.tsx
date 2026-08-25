@@ -5,6 +5,9 @@ import { Header } from "@/components/layout/header";
 import { isDevelopmentEnvironment, DEV_TEST_SHOP_2_NAME } from "@/lib/shop-constants";
 import { loadShopSubscription } from "@/lib/subscription-guards";
 import { TrialBanner } from "@/components/billing/trial-banner";
+import { DeletionBanner } from "@/components/settings/deletion-banner";
+import { daysUntilPurge } from "@/lib/account-deletion";
+import prisma from "@/lib/db";
 
 export default async function AppLayout({
   children,
@@ -28,6 +31,16 @@ export default async function AppLayout({
     ? await loadShopSubscription(user.barbershopId)
     : null;
 
+  // A shop counting down to erasure needs to know on every page, not just the
+  // settings page they are unlikely to revisit.
+  const shopForDeletion = user?.barbershopId
+    ? await prisma.barbershop.findUnique({
+        where: { id: user.barbershopId },
+        select: { deletionRequestedAt: true },
+      })
+    : null;
+  const pendingDeletionAt = shopForDeletion?.deletionRequestedAt ?? null;
+
   return (
     <div className="flex min-h-screen">
       <Sidebar
@@ -49,7 +62,13 @@ export default async function AppLayout({
           hasTestShop2={hasTestShop2}
           showBilling={showBilling}
         />
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main id="main" className="flex-1 p-4 lg:p-6 overflow-auto">
+          {pendingDeletionAt && (
+            <DeletionBanner
+              daysLeft={daysUntilPurge(pendingDeletionAt)}
+              canUndo={showBilling}
+            />
+          )}
           {subscription && (
             <TrialBanner
               status={subscription.subscriptionStatus}

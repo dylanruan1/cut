@@ -134,18 +134,22 @@ export function buildBookingConfirmationSms(
   return `Hi ${clientName}! Your appointment at ${shopName} is confirmed.\n\n${serviceName} with barber ${barberName}\n${dateTime}${manageLine}\n\nReply STOP to opt out.`;
 }
 
+/**
+ * @param whenLabel Already-worded timing, e.g. "tomorrow at 10:30 AM" or "in
+ *   about 2 hours". Built by describeWhen() in @/lib/reminders from the real
+ *   time remaining — this used to be derived from an assumed 24h/2h lead, which
+ *   produced messages that were simply wrong on a daily cron schedule.
+ */
 export function buildReminderSms(
   clientName: string,
   serviceName: string,
-  dateTime: string,
   shopName: string,
-  hoursBefore: number,
+  whenLabel: string,
   manageToken?: string | null
 ): string {
-  const timeLabel = hoursBefore === 24 ? "tomorrow" : "in 2 hours";
   const manageUrl = buildManageUrl(manageToken);
   const manageLine = manageUrl ? ` Need to cancel? ${manageUrl}` : "";
-  return `Hi ${clientName}! Reminder: Your ${serviceName} at ${shopName} is ${timeLabel} at ${dateTime}. See you soon!${manageLine}`;
+  return `Hi ${clientName}! Reminder: Your ${serviceName} at ${shopName} is ${whenLabel}. See you soon!${manageLine}`;
 }
 
 export function buildCancellationSms(

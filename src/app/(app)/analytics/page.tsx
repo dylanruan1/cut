@@ -147,7 +147,7 @@ export default async function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold">{stats.noShowCount}</p>
+            <p className="nums text-3xl font-semibold">{stats.noShowCount}</p>
             <p className="mt-2 text-sm text-muted-foreground">
               {stats.noShowCount === 0
                 ? "None this month."
@@ -183,7 +183,7 @@ function Stat({
           <p className="text-sm text-muted-foreground">{label}</p>
           {icon}
         </div>
-        <p className="mt-1 text-2xl font-semibold">{value}</p>
+        <p className="nums mt-1 text-2xl font-semibold tracking-tight">{value}</p>
         {footer ? <div className="mt-1">{footer}</div> : null}
       </CardContent>
     </Card>

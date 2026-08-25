@@ -5,6 +5,7 @@ import prisma from "@/lib/db";
 import { SettingsForm } from "@/components/settings/settings-form";
 import { serializeForClient } from "@/lib/serializers";
 import { getVoiceWebhookUrl } from "@/lib/voice-webhook";
+import { DangerZone } from "@/components/settings/danger-zone";
 
 export default async function SettingsPage() {
   const { user, shop: subscription } = await requireActiveSubscription();
@@ -17,13 +18,22 @@ export default async function SettingsPage() {
     }),
   ]);
 
+  const isOwner = canManageShop(user.role);
+
   return (
-    <SettingsForm
-      shop={serializeForClient(shop!)}
-      businessHours={serializeForClient(businessHours)}
-      canManage={canManageShop(user.role)}
-      voiceWebhookUrl={getVoiceWebhookUrl()}
-      aiUnlocked={canUseAiReceptionist(subscription)}
-    />
+    <div className="space-y-6">
+      <SettingsForm
+        shop={serializeForClient(shop!)}
+        businessHours={serializeForClient(businessHours)}
+        canManage={isOwner}
+        voiceWebhookUrl={getVoiceWebhookUrl()}
+        aiUnlocked={canUseAiReceptionist(subscription)}
+      />
+      {/* Hidden while deletion is already scheduled — the banner owns that
+          state, and offering "delete" again would just confuse. */}
+      {!shop?.deletionRequestedAt && (
+        <DangerZone isOwner={isOwner} shopName={shop?.name ?? ""} />
+      )}
+    </div>
   );
 }
