@@ -26,7 +26,10 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://cut-dylan.vercel.app";
+// Fallback only — NEXT_PUBLIC_APP_URL should be set in every environment.
+// Used as metadataBase, so getting it wrong makes social preview images
+// resolve against the wrong host and silently fail to render.
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://cutchair.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_URL),
