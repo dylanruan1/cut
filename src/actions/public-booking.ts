@@ -60,14 +60,28 @@ function blockingAppointmentWhere(
   from: Date,
   to: Date
 ): Prisma.AppointmentWhereInput {
+  const now = new Date();
+
   return {
     barbershopId,
     status: { notIn: ["CANCELLED"] },
     startTime: { gte: from, lte: to },
-    NOT: {
-      depositStatus: "PENDING",
-      holdExpiresAt: { lt: new Date() },
-    },
+    // Expressed as an explicit OR rather than NOT(pending AND expired).
+    //
+    // That NOT compiled to SQL three-valued logic: for a row with
+    // depositStatus = PENDING and holdExpiresAt = NULL, the inner AND is NULL,
+    // NOT NULL is NULL, and Postgres drops the row from the result. The
+    // appointment would silently stop blocking its own slot, so the time
+    // showed as free and the customer only discovered otherwise when the
+    // booking failed. Written this way, a hold with no expiry blocks.
+    OR: [
+      // Anything that isn't an open deposit hold always blocks.
+      { depositStatus: { not: "PENDING" } },
+      // An open hold blocks until it demonstrably lapses. A null expiry has
+      // not lapsed.
+      { depositStatus: "PENDING", holdExpiresAt: null },
+      { depositStatus: "PENDING", holdExpiresAt: { gte: now } },
+    ],
   };
 }
 
