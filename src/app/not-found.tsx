@@ -46,6 +46,13 @@ export default function NotFound() {
           Shop owner sign in
         </Link>
       </div>
+
+      <p className="mt-8 text-sm text-muted-foreground">
+        Still stuck?{" "}
+        <Link href="/support" className="font-medium underline underline-offset-4">
+          Get help
+        </Link>
+      </p>
     </main>
   );
 }

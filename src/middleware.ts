@@ -19,6 +19,9 @@ const publicRoutes = [
   // Legal pages are referenced publicly (incl. A2P/carrier review).
   "/privacy",
   "/terms",
+  // Support must work for people who cannot sign in — that's most of the
+  // people who need it.
+  "/support",
   "/api/twilio",
   "/api/health",
   "/api/billing/webhook",

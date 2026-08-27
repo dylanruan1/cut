@@ -454,6 +454,34 @@ model Invitation {
   @@map("invitations")
 }
 
+/// A help request from the /support form.
+///
+/// Stored as well as emailed, because email is the part that can silently
+/// fail. If Resend is down or a message lands in spam, the row is still here
+/// and nobody's question is lost.
+model SupportMessage {
+  id      String @id @default(cuid())
+  name    String
+  email   String
+  topic   String
+  message String
+
+  /// Account context captured automatically when the sender was signed in.
+  /// Saves the "which shop are you?" round trip that email support requires.
+  userId       String?
+  barbershopId String?
+  shopName     String?
+
+  /// False until the notification email actually reaches Resend, so a failed
+  /// send is visible rather than assumed.
+  emailed   Boolean  @default(false)
+  handled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([handled, createdAt])
+  @@map("support_messages")
+}
+
 model Notification {
   id           String           @id @default(cuid())
   barbershopId String
