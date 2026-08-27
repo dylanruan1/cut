@@ -16,9 +16,10 @@ import {
   ChevronLeft,
   Clock,
   Loader2,
-  CalendarDays,
   User,
 } from "lucide-react";
+
+import { WaitlistPrompt } from "@/components/booking/waitlist-prompt";
 
 type Step = "service" | "barber" | "time" | "details" | "done";
 
@@ -61,6 +62,18 @@ function dayLabel(dateKey: string, timezone: string, index: number) {
     top: index === 0 ? "Today" : index === 1 ? "Tomorrow" : weekday,
     bottom: dayNum,
   };
+}
+
+/** Spoken-form day, e.g. "Saturday, Aug 29" — used where there's room for it. */
+function fullDayLabel(dateKey: string, timezone: string): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12));
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(dt);
 }
 
 export function BookingWizard({ shop }: { shop: PublicShop }) {
@@ -293,12 +306,16 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
                 Finding open times…
               </div>
             ) : slots.length === 0 ? (
-              <div className="rounded-xl border bg-card p-8 text-center">
-                <CalendarDays className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
-                  No openings that day. Try another date.
-                </p>
-              </div>
+              // A full day used to be a dead end. Offering the waitlist here
+              // turns the moment of disappointment into a captured lead, and
+              // a later cancellation into a filled chair.
+              <WaitlistPrompt
+                slug={shop.slug}
+                serviceId={serviceId}
+                barberId={barberId === "any" ? undefined : barberId}
+                date={dateKey}
+                dayLabel={fullDayLabel(dateKey, shop.timezone)}
+              />
             ) : (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {slots.map((s) => (

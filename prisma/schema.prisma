@@ -152,6 +152,7 @@ model Barbershop {
   smsLogs                  SmsLog[]
   receptionistCallSessions ReceptionistCallSession[]
   queueEntries             QueueEntry[]
+  waitlistEntries          WaitlistEntry[]
 
   @@map("barbershops")
 }
@@ -452,6 +453,53 @@ model Invitation {
 
   @@index([barbershopId])
   @@map("invitations")
+}
+
+enum TimePreference {
+  MORNING
+  AFTERNOON
+  EVENING
+  ANY
+}
+
+enum WaitlistStatus {
+  WAITING
+  NOTIFIED
+  BOOKED
+  EXPIRED
+}
+
+/// Someone who wanted a day that was full and asked to be told if it opens.
+///
+/// Scoped to a DAY plus a rough time preference rather than one exact slot:
+/// waiting on a single 3pm almost never pays off, whereas one cancellation can
+/// satisfy several people waiting on "Saturday afternoon".
+model WaitlistEntry {
+  id           String @id @default(cuid())
+  barbershopId String
+  /// Null means "any barber" — a much likelier match.
+  barberId     String?
+  serviceId    String
+
+  /// The wanted day, stored as YYYY-MM-DD in the SHOP's timezone. Deliberately
+  /// not a timestamp: "Saturday" is a local calendar concept, and storing an
+  /// instant would drift across DST and server timezones.
+  date           String
+  timePreference TimePreference @default(ANY)
+
+  clientName  String
+  clientPhone String
+
+  status     WaitlistStatus @default(WAITING)
+  /// When we texted them. Everyone matching is texted at once and the first to
+  /// book wins, so this records the send, not a reservation.
+  notifiedAt DateTime?
+  createdAt  DateTime       @default(now())
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([barbershopId, date, status])
+  @@map("waitlist_entries")
 }
 
 /// A help request from the /support form.

@@ -21,6 +21,7 @@ import {
   DOUBLE_BOOKING_MESSAGE,
 } from "@/lib/booking-conflict";
 import { formatTime, formatShortDate } from "@/lib/dates";
+import { notifyWaitlistForFreedSlot } from "@/lib/waitlist-notify";
 import { resolveShopTimezone } from "@/lib/datetime";
 import {
   hoursUntil as hoursUntilStart,
@@ -492,6 +493,17 @@ export async function cancelManagedAppointment(
     "cancellation",
     appointment.id
   );
+
+  // The slot is bookable again the moment the status flips, but nobody knows
+  // unless we say so — which is how a cancelled Saturday afternoon quietly
+  // becomes a haircut that never happens. Best-effort: never let a failed
+  // notification turn a successful cancellation into an error.
+  await notifyWaitlistForFreedSlot({
+    barbershopId: appointment.barbershopId,
+    startTime: appointment.startTime,
+    barberId: appointment.barberId,
+    serviceId: appointment.serviceId,
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/calendar");
