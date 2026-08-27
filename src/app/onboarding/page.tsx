@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { Loader2, Scissors } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Loader2, Scissors, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,9 +34,25 @@ const SERVICE_OPTIONS = [
   { id: "custom", label: "Custom service" },
 ] as const;
 
+/**
+ * useSearchParams() forces this subtree to render on the client, and Next
+ * requires a Suspense boundary around it or the production build fails. tsc
+ * does not catch that, so the boundary lives here deliberately.
+ */
 export default function OnboardingPage() {
+  return (
+    // Fallback must not itself call useSearchParams, or it recurses.
+    <Suspense fallback={null}>
+      <OnboardingForm />
+    </Suspense>
+  );
+}
+
+function OnboardingForm() {
   const [loading, setLoading] = useState(false);
   const [includeCustom, setIncludeCustom] = useState(false);
+  // Set by the auth callback after a successful email verification.
+  const justVerified = useSearchParams().get("verified") === "1";
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -60,6 +77,19 @@ export default function OnboardingPage() {
             <span className="text-2xl font-semibold tracking-tight">Cut.</span>
           </Link>
         </div>
+
+        {justVerified && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-medium">Email confirmed</p>
+              <p className="text-sm text-muted-foreground">
+                Your account is verified. One more step and you&apos;re taking
+                bookings.
+              </p>
+            </div>
+          </div>
+        )}
 
         <Card className="border-border/60 shadow-soft">
           <CardHeader className="text-center">

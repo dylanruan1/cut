@@ -43,7 +43,12 @@ export async function GET(request: Request) {
           ? "/onboarding"
           : next;
 
-      return NextResponse.redirect(`${origin}${destination}`);
+      // Carry a flag so the landing page can acknowledge the verification.
+      // Without it the click just dumps someone on a form with no sign that
+      // the thing they were asked to do actually worked.
+      const url = new URL(`${origin}${destination}`);
+      url.searchParams.set("verified", "1");
+      return NextResponse.redirect(url.toString());
     }
   }
 
