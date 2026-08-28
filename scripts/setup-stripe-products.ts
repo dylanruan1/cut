@@ -136,15 +136,36 @@ async function main() {
       console.log(`Created product for ${plan.cutPlan}: ${product.id}`);
     }
 
+    const amount = Number(
+      process.env[plan.amountCentsEnv] ?? plan.defaultAmountCents
+    );
+
     let price = await findActiveMonthlyPrice(product.id);
+
+    // Stripe prices are immutable — an amount change means a NEW price.
+    //
+    // This used to reuse any existing monthly price regardless of amount, so
+    // editing the numbers in this file silently did nothing: the pricing page
+    // advertised the new figure while Stripe kept charging the old one. A
+    // customer would be shown $249 and billed $99.
+    if (price && price.unit_amount !== amount) {
+      console.log(
+        `Price for ${plan.cutPlan} is $${((price.unit_amount ?? 0) / 100).toFixed(2)}` +
+          ` but should be $${(amount / 100).toFixed(2)} — creating a new one.`
+      );
+      // Archive rather than delete. Shops already subscribed stay on the old
+      // price (grandfathered); archiving only stops new checkouts using it.
+      await stripe.prices.update(price.id, { active: false });
+      console.log(`  archived old price ${price.id}`);
+      price = null;
+    }
+
     if (price) {
       console.log(
-        `Found existing monthly price for ${plan.cutPlan}: ${price.id}`
+        `Price for ${plan.cutPlan} already correct at ` +
+          `$${(amount / 100).toFixed(2)}/mo: ${price.id}`
       );
     } else {
-      const amount = Number(
-        process.env[plan.amountCentsEnv] ?? plan.defaultAmountCents
-      );
       price = await stripe.prices.create({
         product: product.id,
         currency: "usd",
@@ -155,6 +176,13 @@ async function main() {
       console.log(
         `Created $${(amount / 100).toFixed(2)}/mo price for ${plan.cutPlan}: ${price.id}`
       );
+    }
+
+    // Keep the product blurb in step with the plan description too.
+    if (product.description !== plan.description) {
+      await stripe.products.update(product.id, {
+        description: plan.description,
+      });
     }
 
     results[plan.cutPlan] = price.id;
