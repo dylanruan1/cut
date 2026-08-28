@@ -121,7 +121,32 @@ export default async function PublicBookingPage({
         )}
       </main>
 
-      <footer className="container mx-auto max-w-2xl px-4 pb-10 text-center">
+      <footer className="container mx-auto max-w-2xl space-y-3 px-4 pb-10 text-center">
+        {/* A2P 10DLC disclosure, repeated here on purpose.
+            The detailed consent line lives next to the phone field, but that is
+            step 4 of the wizard. A carrier reviewer opening this link sees only
+            step 1, finds no consent language, and rejects the campaign for an
+            unverifiable call to action — which is exactly what happened. This
+            copy is visible on every step, including the first thing they see. */}
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          By booking or joining the waitlist you agree to receive appointment
+          text messages from {shop.name} at the number you provide. Message
+          frequency varies. Message and data rates may apply. Reply STOP to opt
+          out or HELP for help.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          <a href="/privacy" className="underline underline-offset-2">
+            Privacy Policy
+          </a>
+          {" · "}
+          <a href="/terms" className="underline underline-offset-2">
+            Terms
+          </a>
+          {" · "}
+          <a href="/support" className="underline underline-offset-2">
+            Help
+          </a>
+        </p>
         <p className="text-xs text-muted-foreground">
           Powered by <span className="font-medium">Cut.</span>
         </p>

@@ -68,7 +68,27 @@ export default async function QueuePage({ params }: Props) {
         <JoinQueueForm shop={shop} />
       </main>
 
-      <footer className="container mx-auto max-w-lg px-4 pb-10 text-center">
+      <footer className="container mx-auto max-w-lg space-y-3 px-4 pb-10 text-center">
+        {/* A2P 10DLC disclosure — see the twin in /book/[slug]/page.tsx. */}
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          By joining the line you agree to receive text messages about your
+          place in the queue from {shop.name} at the number you provide.
+          Message frequency varies. Message and data rates may apply. Reply
+          STOP to opt out or HELP for help.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          <a href="/privacy" className="underline underline-offset-2">
+            Privacy Policy
+          </a>
+          {" · "}
+          <a href="/terms" className="underline underline-offset-2">
+            Terms
+          </a>
+          {" · "}
+          <a href="/support" className="underline underline-offset-2">
+            Help
+          </a>
+        </p>
         <p className="text-xs text-muted-foreground">
           Powered by <span className="font-medium">Cut.</span>
         </p>
