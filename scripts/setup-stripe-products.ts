@@ -14,9 +14,9 @@
  * for you (or Cursor) to add.
  *
  * Optional overrides (cents), if you don't want the defaults:
- *   STRIPE_STARTER_AMOUNT_CENTS (default 2900 = $29/mo)
- *   STRIPE_PRO_AMOUNT_CENTS (default 5900 = $59/mo)
- *   STRIPE_AI_RECEPTIONIST_AMOUNT_CENTS (default 9900 = $99/mo)
+ *   STRIPE_STARTER_AMOUNT_CENTS (default 3900 = $39/mo)
+ *   STRIPE_PRO_AMOUNT_CENTS (default 9900 = $99/mo)
+ *   STRIPE_AI_RECEPTIONIST_AMOUNT_CENTS (default 24900 = $249/mo)
  */
 
 import fs from "fs";
@@ -72,24 +72,26 @@ const PLANS: PlanConfig[] = [
   {
     cutPlan: "STARTER",
     name: "Cut — Starter",
-    description: "Calendar, clients, services, and basic shop settings.",
+    description:
+      "Online booking, walk-in queue, calendar, clients, and deposits. For a solo barber.",
     amountCentsEnv: "STRIPE_STARTER_AMOUNT_CENTS",
-    defaultAmountCents: 2900,
+    defaultAmountCents: 3900,
   },
   {
     cutPlan: "PRO",
     name: "Cut — Pro",
-    description: "Everything in Starter, plus team management and analytics.",
+    description:
+      "Everything in Starter, plus up to 6 barbers, team management and analytics.",
     amountCentsEnv: "STRIPE_PRO_AMOUNT_CENTS",
-    defaultAmountCents: 5900,
+    defaultAmountCents: 9900,
   },
   {
     cutPlan: "AI_RECEPTIONIST",
     name: "Cut — AI Receptionist",
     description:
-      "Everything in Pro, plus the AI phone receptionist and automatic call booking.",
+      "Everything in Pro, plus an AI that answers the shop phone 24/7 and books by voice.",
     amountCentsEnv: "STRIPE_AI_RECEPTIONIST_AMOUNT_CENTS",
-    defaultAmountCents: 9900,
+    defaultAmountCents: 24900,
   },
 ];
 

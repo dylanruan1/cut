@@ -115,6 +115,26 @@ export function PricingCards({
             <CardHeader>
               <CardTitle className="text-xl">{meta.name}</CardTitle>
               <CardDescription>{meta.subtitle}</CardDescription>
+              {/* The page previously listed features and a "Choose plan"
+                  button with no price anywhere — a shop owner had to start
+                  checkout to discover the cost. */}
+              {meta.monthlyPrice !== null && (
+                <div className="pt-3">
+                  <p className="nums flex items-baseline gap-1">
+                    <span className="text-3xl font-semibold tracking-tight">
+                      ${meta.monthlyPrice}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      /month
+                    </span>
+                  </p>
+                  {meta.priceNote && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {meta.priceNote}
+                    </p>
+                  )}
+                </div>
+              )}
             </CardHeader>
             <CardContent className="flex-1 space-y-3">
               <ul className="space-y-2.5">

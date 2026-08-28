@@ -27,52 +27,76 @@ export type ShopSubscriptionSnapshot = {
   currentPeriodEnd: Date | null;
 };
 
+/**
+ * Plan pricing and copy.
+ *
+ * Prices live here rather than only in Stripe so the pricing page can state a
+ * number without a round trip. They must be kept in step with the Stripe
+ * prices created by scripts/setup-stripe-products.ts — Stripe is the source of
+ * truth for what is actually charged; this is what the customer is told.
+ *
+ * Positioning note: Cut takes no cut of payments (PLATFORM_FEE_BPS is 0), so a
+ * shop pays only Stripe's own processing. Competitors resell processing at
+ * 2.6–2.75%, so "we don't touch your payments" is a real difference and is
+ * stated on the page deliberately.
+ */
 export const PLAN_DISPLAY: Record<
   ShopPlan,
   {
     name: string;
     subtitle: string;
+    /** Monthly price in whole dollars. Null for the placeholder NONE plan. */
+    monthlyPrice: number | null;
     features: string[];
     highlight?: boolean;
+    /** Shown under the price where it needs justifying. */
+    priceNote?: string;
   }
 > = {
   NONE: {
     name: "No plan",
     subtitle: "Choose a plan to unlock Cut.",
+    monthlyPrice: null,
     features: [],
   },
   STARTER: {
     name: "Starter",
-    subtitle: "Run your appointment calendar.",
+    subtitle: "For a solo barber.",
+    monthlyPrice: 39,
     features: [
+      "Online booking page",
+      "Walk-in queue with QR code",
       "Calendar scheduling",
-      "Client list",
-      "Services",
-      "Shop settings",
-      "Basic appointment management",
+      "Client list and services",
+      "Deposits and no-show protection",
+      "No fees on payments — you keep what Stripe doesn't take",
     ],
   },
   PRO: {
     name: "Pro",
-    subtitle: "Manage your shop, team, clients, and analytics.",
+    subtitle: "For a shop with a team.",
+    monthlyPrice: 99,
     features: [
       "Everything in Starter",
-      "Team management",
-      "Analytics",
+      "Up to 6 barbers",
+      "Team management and permissions",
+      "Revenue and no-show analytics",
       "Multi-barber calendar",
-      "Better client management",
     ],
   },
   AI_RECEPTIONIST: {
     name: "AI Receptionist",
-    subtitle: "Let customers call and book automatically.",
+    subtitle: "Nobody misses a call again.",
+    monthlyPrice: 249,
+    priceNote:
+      "Pays for itself at about six recovered calls a month.",
     features: [
       "Everything in Pro",
-      "AI phone receptionist",
-      "Automatic phone booking",
-      "Twilio phone setup",
-      "Call routing by shop",
-      "Appointment confirmations",
+      "AI answers your phone 24/7",
+      "Books, reschedules and cancels by voice",
+      "Speaks English and Spanish",
+      "Keeps your existing number",
+      "Never puts a customer on hold",
     ],
     highlight: true,
   },

@@ -15,7 +15,21 @@ import { getStripe, getAppUrl } from "@/lib/stripe";
  * booking platforms handle shop payouts.
  */
 
-/** Platform fee in basis points (100 bps = 1%). Configurable per deployment. */
+/**
+ * Platform fee in basis points (100 bps = 1%). Configurable per deployment.
+ *
+ * Deliberately left at 0.
+ *
+ * Cut's fee would stack on top of Stripe's own 2.9% + 30c, because Cut does
+ * not resell processing the way Booksy, Vagaro and Square do — their headline
+ * 2.6-2.75% IS the processing, of which they keep a fraction. Charging even 1%
+ * here would put a shop at roughly 3.9%, visibly worse than every competitor
+ * on the one number shops actually compare.
+ *
+ * So the money is made on subscriptions, and "we take nothing from your
+ * payments" is a claim none of them can match. Revisit once there are enough
+ * shops that payment volume outweighs the positioning.
+ */
 export function platformFeeBps(): number {
   const raw = Number(process.env.PLATFORM_FEE_BPS ?? "0");
   if (!Number.isFinite(raw) || raw < 0) return 0;
