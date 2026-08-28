@@ -455,6 +455,23 @@ model Invitation {
   @@map("invitations")
 }
 
+/// Numbers that replied STOP.
+///
+/// Keyed by phone alone rather than per shop: a person who opts out has opted
+/// out, and carriers treat continued sending to that number as a violation no
+/// matter which shop is asking. Twilio already blocks these at its edge, but
+/// without this table the app never learns and keeps queueing sends that go
+/// nowhere.
+model SmsOptOut {
+  /// E.164, as normalizePhone produces.
+  phone     String   @id
+  optedOutAt DateTime @default(now())
+  /// Set when they reply START, kept for an audit trail rather than deleting.
+  optedInAt DateTime?
+
+  @@map("sms_opt_outs")
+}
+
 enum TimePreference {
   MORNING
   AFTERNOON

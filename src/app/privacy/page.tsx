@@ -93,11 +93,25 @@ export default function PrivacyPage() {
                 based on your appointments. Message and data rates may apply.
               </li>
               <li>
-                <strong>No marketing sale.</strong> We do not sell your phone
-                number, and mobile opt-in information is never shared with third
-                parties for their own marketing purposes.
+                <strong>Sharing.</strong> No mobile information will be shared
+                with third parties or affiliates for marketing or promotional
+                purposes. Information sharing to subcontractors in support
+                services, such as customer service, is permitted. All other use
+                case categories exclude text messaging originator opt-in data
+                and consent; this information will not be shared with any third
+                parties.
               </li>
             </ul>
+            {/* Carrier reviewers look for this statement close to verbatim.
+                A paraphrase — even a stricter one — reads as missing and gets
+                the A2P campaign rejected, which silently kills every text the
+                product sends. Do not "tidy" this wording. */}
+            <p className="rounded-xl border bg-muted/40 p-4">
+              <strong>Mobile information sharing:</strong> No mobile information
+              will be shared with third parties or affiliates for marketing or
+              promotional purposes. Text messaging originator opt-in data and
+              consent will not be shared with any third parties.
+            </p>
           </Section>
 
           <Section title="How we use information">

@@ -132,6 +132,32 @@ export function JoinQueueForm({ shop }: { shop: QueueShop }) {
             <p className="mt-1 text-xs text-muted-foreground">
               We&apos;ll text you when you&apos;re nearly up — go grab a coffee.
             </p>
+            {/* A2P 10DLC call to action. Every place Cut collects a number for
+                texting needs visible consent, or carriers reject the campaign
+                and no SMS sends at all. See booking-wizard.tsx for the twin. */}
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              By joining, you agree to receive text messages about your place in
+              line. Message frequency varies. Message and data rates may apply.
+              Reply STOP to opt out or HELP for help. See our{" "}
+              <a
+                href="/privacy"
+                className="underline underline-offset-2"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Privacy Policy
+              </a>{" "}
+              and{" "}
+              <a
+                href="/terms"
+                className="underline underline-offset-2"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Terms
+              </a>
+              .
+            </p>
           </div>
 
           <Button

@@ -139,6 +139,22 @@ export function WaitlistPrompt({
         </p>
       </div>
 
+      {/* A2P 10DLC call to action — required anywhere a number is collected
+          for texting. */}
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        By joining the list, you agree to receive a text if a spot opens.
+        Message frequency varies. Message and data rates may apply. Reply STOP
+        to opt out or HELP for help. See our{" "}
+        <a href="/privacy" className="underline underline-offset-2" target="_blank" rel="noreferrer">
+          Privacy Policy
+        </a>{" "}
+        and{" "}
+        <a href="/terms" className="underline underline-offset-2" target="_blank" rel="noreferrer">
+          Terms
+        </a>
+        .
+      </p>
+
       {error && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}

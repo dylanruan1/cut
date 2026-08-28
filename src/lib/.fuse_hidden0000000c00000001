@@ -101,7 +101,7 @@ export async function sendSms(
     const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
     const message = await client.messages.create({
       body,
-      to: normalisedTo,
+      to: normalizePhone(to),
       ...(messagingServiceSid
         ? { messagingServiceSid }
         : { from: process.env.TWILIO_PHONE_NUMBER! }),
@@ -112,7 +112,7 @@ export async function sendSms(
       data: {
         barbershopId,
         appointmentId,
-        to: normalisedTo,
+        to: normalizePhone(to),
         body,
         type,
         twilioSid: message.sid,

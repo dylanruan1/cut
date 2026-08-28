@@ -376,8 +376,34 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
                 inputMode="tel"
                 autoComplete="tel"
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                We&apos;ll text your confirmation here.
+              {/* This is the A2P 10DLC "call to action". Carriers review the
+                  page where consent is collected and reject the campaign if
+                  they cannot see it — which is exactly why this registration
+                  failed before. It must stay visible, next to the phone field,
+                  and keep the frequency, rates, STOP/HELP and policy links. */}
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                By booking, you agree to receive appointment text messages from{" "}
+                {shop.name} at this number — confirmations, reminders, and
+                changes. Message frequency varies. Message and data rates may
+                apply. Reply STOP to opt out or HELP for help. See our{" "}
+                <a
+                  href="/privacy"
+                  className="underline underline-offset-2"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Privacy Policy
+                </a>{" "}
+                and{" "}
+                <a
+                  href="/terms"
+                  className="underline underline-offset-2"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Terms
+                </a>
+                .
               </p>
             </div>
             <div>
