@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { UserRole } from "@prisma/client";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -33,7 +34,18 @@ export type ShopAuthUser = AuthUser & {
   barbershop: NonNullable<AuthUser["barbershop"]>;
 };
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
+/**
+ * The signed-in user, with active shop and memberships.
+ *
+ * Wrapped in React's cache() so it runs **once per request** instead of once
+ * per caller. The app layout calls it, and then the page calls
+ * requireActiveSubscription() which calls it again — so every navigation was
+ * paying for two Supabase auth round trips and two membership queries to get
+ * the same answer. Deduping is the single biggest win on page-to-page speed.
+ *
+ * cache() is per-request, so this never serves one user's data to another.
+ */
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<AuthUser | null> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -160,7 +172,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     barbershop,
     memberships,
   };
-}
+});
 
 export async function requireUser(): Promise<AuthUser> {
   const user = await getCurrentUser();

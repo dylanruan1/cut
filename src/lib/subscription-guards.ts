@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/db";
 import { requireShopUser, type ShopAuthUser } from "@/lib/auth";
@@ -9,7 +10,12 @@ import {
   type ShopSubscriptionSnapshot,
 } from "@/lib/subscription";
 
-export async function loadShopSubscription(
+/**
+ * Cached per request — the layout loads this for the trial banner and the page
+ * loads it again through requireActiveSubscription(), which was two identical
+ * queries on every navigation.
+ */
+export const loadShopSubscription = cache(async function loadShopSubscription(
   barbershopId: string
 ): Promise<ShopSubscriptionSnapshot> {
   const shop = await prisma.barbershop.findUniqueOrThrow({
@@ -27,7 +33,7 @@ export async function loadShopSubscription(
     },
   });
   return shop;
-}
+});
 
 export async function requireActiveSubscription(): Promise<{
   user: ShopAuthUser;

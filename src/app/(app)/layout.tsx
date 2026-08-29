@@ -26,28 +26,28 @@ export default async function AppLayout({
   );
   const showBilling = user ? canManageShop(user.role) : false;
 
-  // Warn before the trial lapses rather than bouncing them to /pricing cold.
-  const subscription = user?.barbershopId
-    ? await loadShopSubscription(user.barbershopId)
-    : null;
+  // These three ran as sequential awaits, so every page navigation waited for
+  // one database round trip after another before rendering anything. They do
+  // not depend on each other, so they go together.
+  const [subscription, shopForDeletion, unreadNotifications] = user?.barbershopId
+    ? await Promise.all([
+        // Warn before the trial lapses rather than bouncing them to /pricing cold.
+        loadShopSubscription(user.barbershopId),
+        // A shop counting down to erasure needs to know on every page, not just
+        // the settings page they are unlikely to revisit.
+        prisma.barbershop.findUnique({
+          where: { id: user.barbershopId },
+          select: { deletionRequestedAt: true },
+        }),
+        // Resolved here rather than in the bell itself, so the badge is correct
+        // on first paint instead of popping in after a client fetch.
+        prisma.notification.count({
+          where: { barbershopId: user.barbershopId, isRead: false },
+        }),
+      ])
+    : [null, null, 0];
 
-  // A shop counting down to erasure needs to know on every page, not just the
-  // settings page they are unlikely to revisit.
-  const shopForDeletion = user?.barbershopId
-    ? await prisma.barbershop.findUnique({
-        where: { id: user.barbershopId },
-        select: { deletionRequestedAt: true },
-      })
-    : null;
   const pendingDeletionAt = shopForDeletion?.deletionRequestedAt ?? null;
-
-  // Resolved here rather than in the bell itself, so the badge is correct on
-  // first paint instead of popping in after a client fetch.
-  const unreadNotifications = user?.barbershopId
-    ? await prisma.notification.count({
-        where: { barbershopId: user.barbershopId, isRead: false },
-      })
-    : 0;
 
   return (
     <div className="flex min-h-screen">
