@@ -1,7 +1,5 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Button } from "@/components/ui/button";
-import { Scissors, ArrowRight } from "lucide-react";
 import { PLAN_DISPLAY } from "@/lib/subscription";
 
 export const metadata: Metadata = {
@@ -13,222 +11,216 @@ export const metadata: Metadata = {
 /**
  * Marketing home page.
  *
- * Written against the specific failure of the previous version, which read as
- * generated: three equal call-to-action buttons in the hero, four identical
- * feature cards in a grid, everything centre-aligned, and copy that described
- * the implementation ("Twilio Voice integration") rather than what a barber
- * gets. It also ended after the features — no price, no second ask.
+ * Deliberately does not use the app's design tokens.
  *
- * The rules here: one primary action, left-aligned type, benefits in the
- * shop's own language, and a real number on the page. No invented statistics
- * and no fake testimonials — there are no customers yet, and claiming
- * otherwise is both dishonest and the fastest way to lose a barber's trust.
+ * The rest of Cut is rounded, soft-shadowed and blue — fine for a tool someone
+ * uses all day, but it is also exactly the shadcn default look, so a landing
+ * page built from it reads as generated no matter how good the copy is. This
+ * page is set in hard black and white with square corners, hairline rules and
+ * oversized type: closer to a barbershop's own signage than to a SaaS
+ * template. Nothing here is rounded and nothing is coloured.
  */
 export default function HomePage() {
   const ai = PLAN_DISPLAY.AI_RECEPTIONIST;
   const starter = PLAN_DISPLAY.STARTER;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-glass">
-        <div className="container mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary">
-              <Scissors className="h-4 w-4 text-primary-foreground" aria-hidden="true" />
-            </span>
-            <span className="text-xl font-semibold tracking-tight">Cut.</span>
+    <div className="min-h-screen bg-white text-black selection:bg-black selection:text-white">
+      <header className="sticky top-0 z-50 border-b-2 border-black bg-white">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+          <Link
+            href="/"
+            className="text-2xl font-black uppercase tracking-tighter"
+          >
+            Cut.
           </Link>
-          <nav className="flex items-center gap-1 sm:gap-3">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/pricing">Pricing</Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/login">Sign in</Link>
-            </Button>
-            <Button size="sm" asChild>
-              <Link href="/signup">Start free</Link>
-            </Button>
+          <nav className="flex items-center gap-6 text-sm font-bold uppercase tracking-wide">
+            <Link href="/pricing" className="hover:underline">
+              Pricing
+            </Link>
+            <Link href="/login" className="hover:underline">
+              Sign in
+            </Link>
+            <Link
+              href="/signup"
+              className="bg-black px-4 py-2 text-white hover:bg-black/80"
+            >
+              Start
+            </Link>
           </nav>
         </div>
       </header>
 
       <main id="main">
-        {/* Hero. Left-aligned and asymmetric on purpose — a centred stack of
-            three buttons is the single clearest sign nobody decided what the
-            page is for. */}
-        <section className="container mx-auto max-w-5xl px-4 pb-16 pt-20 md:pt-28">
-          <div className="grid gap-12 lg:grid-cols-[1.15fr_1fr] lg:items-center">
-            <div>
-              <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-                For barbershops
-              </p>
-              <h1 className="mt-4 text-balance text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
-                Your hands are busy.
+        {/* Hero. Type does the work — no card, no gradient, no illustration. */}
+        <section className="border-b-2 border-black">
+          <div className="mx-auto max-w-6xl px-5 py-20 md:py-28">
+            <p className="text-xs font-bold uppercase tracking-[0.2em]">
+              For barbershops
+            </p>
+            <h1 className="mt-6 text-[13vw] font-black uppercase leading-[0.85] tracking-tighter sm:text-[11vw] lg:text-[8.5rem]">
+              The phone
+              <br />
+              answers
+              <br />
+              itself.
+            </h1>
+            <p className="mt-10 max-w-xl text-lg font-medium leading-snug">
+              You&apos;re mid-fade when the shop phone rings. You can&apos;t
+              stop. They don&apos;t leave a message — they call the shop down
+              the street.
+            </p>
+            <div className="mt-10 flex flex-wrap items-center gap-6">
+              <Link
+                href="/signup"
+                className="bg-black px-8 py-4 text-base font-bold uppercase tracking-wide text-white hover:bg-black/80"
+              >
+                Set up your shop
+              </Link>
+              <Link
+                href="/pricing"
+                className="text-base font-bold uppercase tracking-wide underline underline-offset-4"
+              >
+                Pricing
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* The call, as a transcript. Square, ruled, monospaced — reads like a
+            printed record rather than a chat bubble mockup. */}
+        <section className="border-b-2 border-black">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 lg:grid-cols-2">
+            <div className="border-black px-5 py-16 lg:border-r-2 lg:py-20">
+              <h2 className="text-4xl font-black uppercase leading-none tracking-tighter sm:text-5xl">
+                Tuesday
                 <br />
-                Let the phone answer itself.
-              </h1>
-              <p className="mt-6 max-w-lg text-lg leading-relaxed text-muted-foreground">
-                You&apos;re mid-fade when the shop phone rings. You can&apos;t
-                stop. They don&apos;t leave a message — they call the shop down
-                the street. Cut picks up, books them in, and texts them the
-                details.
-              </p>
-
-              <div className="mt-9 flex flex-wrap items-center gap-4">
-                <Button size="lg" asChild>
-                  <Link href="/signup">
-                    Set up your shop
-                    <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-                  </Link>
-                </Button>
-                <Link
-                  href="/pricing"
-                  className="text-sm font-medium underline underline-offset-4 hover:text-muted-foreground"
-                >
-                  See pricing
-                </Link>
-              </div>
-
-              <p className="mt-4 text-sm text-muted-foreground">
-                Free while you set up. From ${starter.monthlyPrice}/month after.
+                2:14 pm
+              </h2>
+              <p className="mt-6 max-w-sm text-base font-medium leading-snug">
+                A real call, handled while both your hands were busy.
               </p>
             </div>
-
-            {/* A concrete artefact beats an illustration: this is what the AI
-                actually does, in the shop's own words. */}
-            <div className="rounded-2xl border bg-card p-6 shadow-card">
-              <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                Tuesday, 2:14pm
-              </p>
-              <dl className="mt-4 space-y-4 text-sm leading-relaxed">
-                <div>
-                  <dt className="text-muted-foreground">Caller</dt>
-                  <dd>&ldquo;Do you have anything Saturday afternoon?&rdquo;</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Cut</dt>
-                  <dd>
-                    &ldquo;I&apos;ve got 3:00 or 4:30 with Mike. Which works?&rdquo;
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Caller</dt>
-                  <dd>&ldquo;3 o&apos;clock.&rdquo;</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Cut</dt>
-                  <dd>
-                    &ldquo;Booked. You&apos;ll get a text to confirm.&rdquo;
-                  </dd>
-                </div>
+            <div className="px-5 py-16 font-mono text-sm lg:py-20">
+              <dl className="space-y-6">
+                <Line who="Caller">
+                  Do you have anything Saturday afternoon?
+                </Line>
+                <Line who="Cut">
+                  I&apos;ve got 3:00 or 4:30 with Mike. Which works?
+                </Line>
+                <Line who="Caller">3 o&apos;clock.</Line>
+                <Line who="Cut">
+                  Booked. You&apos;ll get a text to confirm.
+                </Line>
               </dl>
-              <p className="mt-5 border-t pt-4 text-xs text-muted-foreground">
-                You were cutting hair the whole time.
+              <p className="mt-10 border-t-2 border-black pt-4 text-xs font-bold uppercase tracking-wide">
+                You were cutting hair the whole time
               </p>
             </div>
           </div>
         </section>
 
-        {/* Benefits, not features. Asymmetric two-column rather than four
-            identical cards, and written as what happens in the shop. */}
-        <section className="border-t bg-muted/20">
-          <div className="container mx-auto max-w-5xl px-4 py-20">
-            <h2 className="max-w-xl text-balance text-3xl font-semibold tracking-tight">
-              Everything that happens when you&apos;re not at the desk
+        {/* Benefits as a numbered ledger, not a card grid. */}
+        <section className="border-b-2 border-black">
+          <div className="mx-auto max-w-6xl px-5 py-20">
+            <h2 className="max-w-2xl text-4xl font-black uppercase leading-[0.9] tracking-tighter sm:text-6xl">
+              What happens
+              <br />
+              while you work
             </h2>
 
-            <div className="mt-12 grid gap-x-12 gap-y-10 sm:grid-cols-2">
-              <Benefit title="The phone gets answered">
-                Day, night, Sunday, mid-haircut. It books, reschedules and
-                cancels by voice, in English or Spanish, on the number your
-                customers already have.
-              </Benefit>
-              <Benefit title="Walk-ins stop crowding the door">
-                They scan a code on the window, join the line from the
+            <div className="mt-16 border-t-2 border-black">
+              <Item n="01" title="The phone gets answered">
+                Day, night, Sunday, mid-haircut. Books, reschedules and cancels
+                by voice, in English or Spanish, on your existing number.
+              </Item>
+              <Item n="02" title="Walk-ins stop crowding the door">
+                They scan a code in the window, join the line from the
                 pavement, and get a text when they&apos;re nearly up.
-              </Benefit>
-              <Benefit title="No-shows cost them, not you">
-                Take a deposit on booking. It goes straight to your bank, not
-                ours. Cancel late and they forfeit it.
-              </Benefit>
-              <Benefit title="Cancellations get refilled">
+              </Item>
+              <Item n="03" title="No-shows cost them, not you">
+                Take a deposit on booking. Straight to your bank, not ours.
+                Cancel late and they forfeit it.
+              </Item>
+              <Item n="04" title="Cancellations get refilled">
                 When someone drops out, everyone waiting on that day gets a
                 text. The chair fills instead of sitting empty.
-              </Benefit>
-              <Benefit title="Your barbers keep their own books">
-                Each one has their own calendar, hours and clients. You see the
-                whole shop.
-              </Benefit>
-              <Benefit title="You keep your card payments">
-                We don&apos;t take a cut of what your customers pay. You pay
+              </Item>
+              <Item n="05" title="Every barber keeps their own book">
+                Own calendar, own hours, own clients. You see the whole shop.
+              </Item>
+              <Item n="06" title="You keep your card payments">
+                We take nothing from what your customers pay. You pay
                 Stripe&apos;s rate and nothing on top.
-              </Benefit>
+              </Item>
             </div>
           </div>
         </section>
 
-        {/* Price on the page. Making someone start a checkout to discover the
-            cost reads as something to hide. */}
-        <section className="container mx-auto max-w-5xl px-4 py-20">
-          <div className="rounded-2xl border bg-card p-8 shadow-card sm:p-12">
-            <div className="grid gap-8 lg:grid-cols-[1.2fr_1fr] lg:items-center">
-              <div>
-                <h2 className="text-balance text-3xl font-semibold tracking-tight">
-                  A missed call is a lost haircut
-                </h2>
-                <p className="mt-4 max-w-lg text-muted-foreground">
-                  At a $40 cut, the AI receptionist pays for itself at about six
-                  recovered calls a month. Most shops miss more than that in a
-                  week.
-                </p>
-                <div className="mt-8 flex flex-wrap items-center gap-4">
-                  <Button size="lg" asChild>
-                    <Link href="/signup">
-                      Set up your shop
-                      <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-                    </Link>
-                  </Button>
-                  <Link
-                    href="/pricing"
-                    className="text-sm font-medium underline underline-offset-4"
-                  >
-                    Compare plans
-                  </Link>
-                </div>
-              </div>
+        {/* Price. Big, plain, unavoidable. */}
+        <section className="bg-black text-white">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 lg:grid-cols-2">
+            <div className="border-white px-5 py-20 lg:border-r-2">
+              <h2 className="text-4xl font-black uppercase leading-[0.9] tracking-tighter sm:text-5xl">
+                A missed call
+                <br />
+                is a lost
+                <br />
+                haircut
+              </h2>
+              <p className="mt-8 max-w-md text-base font-medium leading-snug">
+                At a $40 cut, the AI receptionist pays for itself at about six
+                recovered calls a month. Most shops miss more than that in a
+                week.
+              </p>
+              <Link
+                href="/signup"
+                className="mt-10 inline-block bg-white px-8 py-4 text-base font-bold uppercase tracking-wide text-black hover:bg-white/85"
+              >
+                Set up your shop
+              </Link>
+            </div>
 
-              <div className="rounded-xl border bg-background p-6">
-                <p className="text-sm text-muted-foreground">{ai.name}</p>
-                <p className="nums mt-1 flex items-baseline gap-1">
-                  <span className="text-4xl font-semibold tracking-tight">
-                    ${ai.monthlyPrice}
-                  </span>
-                  <span className="text-sm text-muted-foreground">/month</span>
-                </p>
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Booking, walk-in queue and deposits start at $
-                  {starter.monthlyPrice}/month.
-                </p>
-              </div>
+            <div className="px-5 py-20">
+              <p className="text-xs font-bold uppercase tracking-[0.2em]">
+                {ai.name}
+              </p>
+              <p className="nums mt-4 text-8xl font-black leading-none tracking-tighter">
+                ${ai.monthlyPrice}
+              </p>
+              <p className="mt-2 text-sm font-bold uppercase tracking-wide">
+                per month
+              </p>
+              <p className="mt-10 border-t-2 border-white pt-6 text-sm font-medium leading-snug">
+                Booking, walk-in queue and deposits start at $
+                {starter.monthlyPrice} a month.
+              </p>
+              <Link
+                href="/pricing"
+                className="mt-4 inline-block text-sm font-bold uppercase tracking-wide underline underline-offset-4"
+              >
+                Compare plans
+              </Link>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t">
-        <div className="container mx-auto flex max-w-5xl flex-col gap-4 px-4 py-10 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+      <footer className="border-t-2 border-black">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-10 text-xs font-bold uppercase tracking-wide sm:flex-row sm:items-center sm:justify-between">
           <p>&copy; {new Date().getFullYear()} Cut.</p>
-          <nav className="flex flex-wrap items-center gap-5">
-            <Link href="/pricing" className="hover:text-foreground">
+          <nav className="flex flex-wrap items-center gap-6">
+            <Link href="/pricing" className="hover:underline">
               Pricing
             </Link>
-            <Link href="/support" className="hover:text-foreground">
+            <Link href="/support" className="hover:underline">
               Support
             </Link>
-            <Link href="/privacy" className="hover:text-foreground">
+            <Link href="/privacy" className="hover:underline">
               Privacy
             </Link>
-            <Link href="/terms" className="hover:text-foreground">
+            <Link href="/terms" className="hover:underline">
               Terms
             </Link>
           </nav>
@@ -238,19 +230,33 @@ export default function HomePage() {
   );
 }
 
-function Benefit({
+function Line({ who, children }: { who: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs font-bold uppercase tracking-widest text-black/50">
+        {who}
+      </dt>
+      <dd className="mt-1 leading-snug">{children}</dd>
+    </div>
+  );
+}
+
+function Item({
+  n,
   title,
   children,
 }: {
+  n: string;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      {/* Sentence case, no icon. A row of identical icon-in-rounded-square
-          tiles is the most recognisable generated-UI pattern there is. */}
-      <h3 className="text-base font-semibold tracking-tight">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+    <div className="grid grid-cols-[3rem_1fr] gap-x-5 border-b-2 border-black py-8 sm:grid-cols-[5rem_1fr] md:grid-cols-[6rem_18rem_1fr] md:gap-x-8">
+      <p className="nums text-sm font-black tracking-tight">{n}</p>
+      <h3 className="text-xl font-black uppercase leading-none tracking-tight sm:text-2xl">
+        {title}
+      </h3>
+      <p className="col-start-2 mt-3 max-w-md text-sm font-medium leading-snug md:col-start-3 md:mt-0">
         {children}
       </p>
     </div>
