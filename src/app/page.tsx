@@ -11,22 +11,18 @@ export const metadata: Metadata = {
 /**
  * Marketing home page.
  *
- * Deliberately does not use the app's design tokens.
- *
- * The rest of Cut is rounded, soft-shadowed and blue — fine for a tool someone
- * uses all day, but it is also exactly the shadcn default look, so a landing
- * page built from it reads as generated no matter how good the copy is. This
- * page is set in hard black and white with square corners, hairline rules and
- * oversized type: closer to a barbershop's own signage than to a SaaS
- * template. Nothing here is rounded and nothing is coloured.
+ * Hard rules, square corners, oversized type — closer to a barbershop's own
+ * signage than a SaaS template. Built on the design tokens rather than literal
+ * black and white so the page inverts correctly in dark mode; the tokens
+ * themselves are monochrome (see globals.css).
  */
 export default function HomePage() {
   const ai = PLAN_DISPLAY.AI_RECEPTIONIST;
   const starter = PLAN_DISPLAY.STARTER;
 
   return (
-    <div className="min-h-screen bg-white text-black selection:bg-black selection:text-white">
-      <header className="sticky top-0 z-50 border-b-2 border-black bg-white">
+    <div className="min-h-screen bg-background text-foreground selection:bg-foreground selection:text-background">
+      <header className="sticky top-0 z-50 border-b-2 border-foreground bg-background">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
           <Link
             href="/"
@@ -43,7 +39,7 @@ export default function HomePage() {
             </Link>
             <Link
               href="/signup"
-              className="bg-black px-4 py-2 text-white hover:bg-black/80"
+              className="bg-foreground px-4 py-2 text-background hover:opacity-80"
             >
               Start
             </Link>
@@ -53,7 +49,7 @@ export default function HomePage() {
 
       <main id="main">
         {/* Hero. Type does the work — no card, no gradient, no illustration. */}
-        <section className="border-b-2 border-black">
+        <section className="border-b-2 border-foreground">
           <div className="mx-auto max-w-6xl px-5 py-20 md:py-28">
             <p className="text-xs font-bold uppercase tracking-[0.2em]">
               For barbershops
@@ -73,7 +69,7 @@ export default function HomePage() {
             <div className="mt-10 flex flex-wrap items-center gap-6">
               <Link
                 href="/signup"
-                className="bg-black px-8 py-4 text-base font-bold uppercase tracking-wide text-white hover:bg-black/80"
+                className="bg-foreground px-8 py-4 text-base font-bold uppercase tracking-wide text-background hover:opacity-80"
               >
                 Set up your shop
               </Link>
@@ -89,9 +85,9 @@ export default function HomePage() {
 
         {/* The call, as a transcript. Square, ruled, monospaced — reads like a
             printed record rather than a chat bubble mockup. */}
-        <section className="border-b-2 border-black">
+        <section className="border-b-2 border-foreground">
           <div className="mx-auto grid max-w-6xl grid-cols-1 lg:grid-cols-2">
-            <div className="border-black px-5 py-16 lg:border-r-2 lg:py-20">
+            <div className="border-foreground px-5 py-16 lg:border-r-2 lg:py-20">
               <h2 className="text-4xl font-black uppercase leading-none tracking-tighter sm:text-5xl">
                 Tuesday
                 <br />
@@ -114,7 +110,7 @@ export default function HomePage() {
                   Booked. You&apos;ll get a text to confirm.
                 </Line>
               </dl>
-              <p className="mt-10 border-t-2 border-black pt-4 text-xs font-bold uppercase tracking-wide">
+              <p className="mt-10 border-t-2 border-foreground pt-4 text-xs font-bold uppercase tracking-wide">
                 You were cutting hair the whole time
               </p>
             </div>
@@ -122,7 +118,7 @@ export default function HomePage() {
         </section>
 
         {/* Benefits as a numbered ledger, not a card grid. */}
-        <section className="border-b-2 border-black">
+        <section className="border-b-2 border-foreground">
           <div className="mx-auto max-w-6xl px-5 py-20">
             <h2 className="max-w-2xl text-4xl font-black uppercase leading-[0.9] tracking-tighter sm:text-6xl">
               What happens
@@ -130,7 +126,7 @@ export default function HomePage() {
               while you work
             </h2>
 
-            <div className="mt-16 border-t-2 border-black">
+            <div className="mt-16 border-t-2 border-foreground">
               <Item n="01" title="The phone gets answered">
                 Day, night, Sunday, mid-haircut. Books, reschedules and cancels
                 by voice, in English or Spanish, on your existing number.
@@ -159,9 +155,9 @@ export default function HomePage() {
         </section>
 
         {/* Price. Big, plain, unavoidable. */}
-        <section className="bg-black text-white">
+        <section className="bg-foreground text-background">
           <div className="mx-auto grid max-w-6xl grid-cols-1 lg:grid-cols-2">
-            <div className="border-white px-5 py-20 lg:border-r-2">
+            <div className="border-background px-5 py-20 lg:border-r-2">
               <h2 className="text-4xl font-black uppercase leading-[0.9] tracking-tighter sm:text-5xl">
                 A missed call
                 <br />
@@ -176,7 +172,7 @@ export default function HomePage() {
               </p>
               <Link
                 href="/signup"
-                className="mt-10 inline-block bg-white px-8 py-4 text-base font-bold uppercase tracking-wide text-black hover:bg-white/85"
+                className="mt-10 inline-block bg-background px-8 py-4 text-base font-bold uppercase tracking-wide text-foreground hover:opacity-85"
               >
                 Set up your shop
               </Link>
@@ -192,7 +188,7 @@ export default function HomePage() {
               <p className="mt-2 text-sm font-bold uppercase tracking-wide">
                 per month
               </p>
-              <p className="mt-10 border-t-2 border-white pt-6 text-sm font-medium leading-snug">
+              <p className="mt-10 border-t-2 border-background pt-6 text-sm font-medium leading-snug">
                 Booking, walk-in queue and deposits start at $
                 {starter.monthlyPrice} a month.
               </p>
@@ -207,7 +203,7 @@ export default function HomePage() {
         </section>
       </main>
 
-      <footer className="border-t-2 border-black">
+      <footer className="border-t-2 border-foreground">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-10 text-xs font-bold uppercase tracking-wide sm:flex-row sm:items-center sm:justify-between">
           <p>&copy; {new Date().getFullYear()} Cut.</p>
           <nav className="flex flex-wrap items-center gap-6">
@@ -233,7 +229,7 @@ export default function HomePage() {
 function Line({ who, children }: { who: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs font-bold uppercase tracking-widest text-black/50">
+      <dt className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
         {who}
       </dt>
       <dd className="mt-1 leading-snug">{children}</dd>
@@ -251,7 +247,7 @@ function Item({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[3rem_1fr] gap-x-5 border-b-2 border-black py-8 sm:grid-cols-[5rem_1fr] md:grid-cols-[6rem_18rem_1fr] md:gap-x-8">
+    <div className="grid grid-cols-[3rem_1fr] gap-x-5 border-b-2 border-foreground py-8 sm:grid-cols-[5rem_1fr] md:grid-cols-[6rem_18rem_1fr] md:gap-x-8">
       <p className="nums text-sm font-black tracking-tight">{n}</p>
       <h3 className="text-xl font-black uppercase leading-none tracking-tight sm:text-2xl">
         {title}

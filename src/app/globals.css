@@ -2,54 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Monochrome, square-cornered identity.
+ *
+ * Set at the token level rather than page by page: every shadcn component
+ * derives its colour and corner radius from these variables, so changing them
+ * here restyles buttons, cards, inputs, dialogs and the whole app at once.
+ *
+ * --destructive stays red on purpose. It is the only place colour carries
+ * meaning rather than decoration — a delete button that looks identical to
+ * every other button is a usability hazard, not a design choice.
+ */
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 0 0% 9%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    --card-foreground: 0 0% 0%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
-    /* 100% saturation reads as the stock "AI app" blue. Pulled back to 74% so
-       it looks chosen rather than defaulted. Same hue, so nothing else moves. */
-    --primary: 211 74% 46%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 0 0% 0%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 9%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 0%;
     --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
-    /* Previously identical to --primary, which made this token meaningless.
-       Now a quiet tinted surface for hover and selected states. */
-    --accent: 211 30% 94%;
-    --accent-foreground: 211 60% 22%;
-    --destructive: 0 84% 60%;
+    --muted-foreground: 0 0% 38%;
+    --accent: 0 0% 92%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 72% 42%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 211 100% 50%;
-    --radius: 0.75rem;
+    --border: 0 0% 0%;
+    --input: 0 0% 0%;
+    --ring: 0 0% 0%;
+    /* Hard corners everywhere. */
+    --radius: 0rem;
   }
 
+  /* Straight inversion. Pure #000 backgrounds are avoided — a hair off black
+     stops large dark areas looking like a hole on OLED phones, which is what
+     most customers are holding. */
   .dark {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 95%;
-    --card: 0 0% 10%;
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 211 72% 56%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 211 22% 20%;
-    --accent-foreground: 211 40% 88%;
-    --destructive: 0 62% 50%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 65% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
-    --ring: 211 100% 55%;
+    --border: 0 0% 100%;
+    --input: 0 0% 100%;
+    --ring: 0 0% 100%;
   }
 }
 
@@ -66,15 +77,32 @@
   html {
     scroll-behavior: smooth;
   }
+
+  /* Headings carry the identity: heavy weight, tight tracking, tight leading.
+     Set globally so every page inherits it instead of each one remembering. */
+  h1,
+  h2,
+  h3 {
+    @apply font-bold tracking-tight;
+    line-height: 1.05;
+  }
+
+  h1 {
+    @apply font-black;
+    letter-spacing: -0.03em;
+  }
 }
 
 @layer utilities {
+  /* Frosted glass belongs to the old rounded look. Kept as plain opaque
+     surfaces so any component still referencing these classes stays legible
+     rather than turning into a blurred smear over hard black rules. */
   .glass {
-    @apply bg-white/70 backdrop-blur-glass dark:bg-black/40;
+    @apply bg-background;
   }
 
   .glass-card {
-    @apply rounded-2xl border border-white/20 bg-white/80 shadow-glass backdrop-blur-glass dark:border-white/10 dark:bg-white/5;
+    @apply border bg-card;
   }
 
   .text-balance {

@@ -58,18 +58,29 @@ const config: Config = {
           foreground: "hsl(var(--card-foreground))",
         },
       },
+      // --radius is 0, so every step collapses to square. The calc() forms are
+      // kept rather than hardcoded to 0 so the whole scale can be restored by
+      // changing the single variable in globals.css.
       borderRadius: {
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
-        xl: "calc(var(--radius) + 4px)",
-        "2xl": "calc(var(--radius) + 8px)",
-        "3xl": "calc(var(--radius) + 16px)",
+        md: "var(--radius)",
+        sm: "var(--radius)",
+        xl: "var(--radius)",
+        "2xl": "var(--radius)",
+        "3xl": "var(--radius)",
+        // Avatars, badges and status dots become squares too. Leaving these
+        // circular in an otherwise hard-edged interface looks like corners
+        // that were missed rather than a decision.
+        full: "var(--radius)",
       },
+      // Depth now comes from hard rules, not soft shadows. Blurred drop
+      // shadows under square black-bordered boxes read as two design systems
+      // fighting, so these are neutralised rather than removed — components
+      // still referencing shadow-card keep working.
       boxShadow: {
-        soft: "0 2px 20px -2px rgba(0, 0, 0, 0.06)",
-        card: "0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 24px rgba(0, 0, 0, 0.06)",
-        glass: "0 8px 32px rgba(0, 0, 0, 0.08)",
+        soft: "none",
+        card: "none",
+        glass: "none",
       },
       backdropBlur: {
         glass: "20px",
