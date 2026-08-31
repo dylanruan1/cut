@@ -27,6 +27,7 @@ import { toast } from "@/hooks/use-toast";
 import { getInitials, formatPhone } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/empty-state";
 import { BarberPinControl } from "@/components/team/barber-pin-control";
+import { WorkingHoursDialog } from "@/components/team/working-hours-dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -160,6 +161,12 @@ export function TeamManager({ barbers, invitations, canManage }: TeamManagerProp
                     barberName={barber.name}
                     hasPin={Boolean(barber.hasVerifyPin)}
                   />
+                  <div className="mt-2">
+                    <WorkingHoursDialog
+                      barberId={barber.id}
+                      barberName={barber.name}
+                    />
+                  </div>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
