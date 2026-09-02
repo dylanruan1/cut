@@ -1,3 +1,4 @@
+import { PoweredByCut } from "@/components/shared/powered-by-cut";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getQueueStatus } from "@/actions/queue";
@@ -25,9 +26,7 @@ export default async function QueueStatusPage({
         <QueueStatusCard status={status} />
       </main>
       <footer className="container mx-auto max-w-lg px-4 pb-10 text-center">
-        <p className="text-xs text-muted-foreground">
-          Powered by <span className="font-medium">Cut.</span>
-        </p>
+        <PoweredByCut />
       </footer>
     </div>
   );

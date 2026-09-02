@@ -6,6 +6,7 @@ import { SettingsForm } from "@/components/settings/settings-form";
 import { serializeForClient } from "@/lib/serializers";
 import { getVoiceWebhookUrl } from "@/lib/voice-webhook";
 import { DangerZone } from "@/components/settings/danger-zone";
+import { BookingLinkCard } from "@/components/settings/booking-link-card";
 
 export default async function SettingsPage() {
   const { user, shop: subscription } = await requireActiveSubscription();
@@ -29,6 +30,8 @@ export default async function SettingsPage() {
         voiceWebhookUrl={getVoiceWebhookUrl()}
         aiUnlocked={canUseAiReceptionist(subscription)}
       />
+      <BookingLinkCard initialSlug={shop?.slug ?? ""} canManage={isOwner} />
+
       {/* Hidden while deletion is already scheduled — the banner owns that
           state, and offering "delete" again would just confuse. */}
       {!shop?.deletionRequestedAt && (

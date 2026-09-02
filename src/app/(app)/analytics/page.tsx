@@ -1,6 +1,7 @@
 import { canViewAnalytics } from "@/lib/auth";
 import { requireActiveSubscription } from "@/lib/subscription-guards";
-import { canUseAnalytics } from "@/lib/subscription";
+import { canUseAnalytics, canUseAiReceptionist } from "@/lib/subscription";
+import { getReceptionistStats } from "@/lib/receptionist-stats";
 import prisma from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FeatureLocked } from "@/components/billing/feature-locked";
@@ -14,6 +15,7 @@ import {
   Calendar,
   UserPlus,
   UserX,
+  PhoneCall,
 } from "lucide-react";
 import { redirect } from "next/navigation";
 
@@ -39,8 +41,12 @@ export default async function AnalyticsPage() {
     select: { timezone: true },
   });
 
-  const stats = await getShopAnalytics(user.barbershopId, timezone);
+  const [stats, receptionist] = await Promise.all([
+    getShopAnalytics(user.barbershopId, timezone),
+    getReceptionistStats(user.barbershopId, timezone),
+  ]);
   const totalVisits = stats.appointmentCount + stats.walkInCount;
+  const aiUnlocked = canUseAiReceptionist(shop);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -104,6 +110,61 @@ export default async function AnalyticsPage() {
         />
       </div>
 
+      {/* The receptionist's own numbers. This is what a shop is paying the AI
+          plan for, so it gets its own block rather than being buried among the
+          general shop stats. */}
+      {aiUnlocked && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <PhoneCall className="h-4 w-4 text-muted-foreground" />
+              Answered by your AI receptionist
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {receptionist.callsAnswered === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No calls yet this month. Once your number is pointed at Cut,
+                every call it answers shows up here.
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <MiniStat
+                    label="Calls answered"
+                    value={String(receptionist.callsAnswered)}
+                  />
+                  <MiniStat
+                    label="Turned into bookings"
+                    value={String(receptionist.callsBooked)}
+                  />
+                  <MiniStat
+                    label="Booked value"
+                    value={formatCurrency(receptionist.bookedValue)}
+                  />
+                  <MiniStat
+                    label="Booking rate"
+                    value={
+                      receptionist.conversionPct === null
+                        ? "—"
+                        : `${receptionist.conversionPct}%`
+                    }
+                  />
+                </div>
+                <p className="mt-4 text-xs text-muted-foreground">
+                  Calls the AI picked up and appointments it put in your
+                  calendar this month.
+                  {receptionist.callsUnfinished > 0 &&
+                    ` ${receptionist.callsUnfinished} call${
+                      receptionist.callsUnfinished === 1 ? "" : "s"
+                    } ended before booking.`}
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -161,6 +222,15 @@ export default async function AnalyticsPage() {
         Revenue counts appointments that have already happened plus paid
         walk-ins. Cancelled appointments and no-shows are excluded.
       </p>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="nums mt-1 text-2xl font-semibold tracking-tight">{value}</p>
     </div>
   );
 }

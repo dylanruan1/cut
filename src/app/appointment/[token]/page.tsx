@@ -1,3 +1,4 @@
+import { PoweredByCut } from "@/components/shared/powered-by-cut";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getManagedAppointment } from "@/actions/manage-booking";
@@ -50,10 +51,13 @@ export default async function ManageAppointmentPage({
         <ManageBooking appointment={appointment} />
       </main>
 
-      <footer className="container mx-auto max-w-xl px-4 pb-10 text-center">
+      <footer className="container mx-auto max-w-xl space-y-2 px-4 pb-10 text-center">
         <p className="text-xs text-muted-foreground">
-          Powered by <span className="font-medium">Cut.</span>
+          <a href="/support" className="underline underline-offset-2">
+            Need help?
+          </a>
         </p>
+        <PoweredByCut />
       </footer>
     </div>
   );

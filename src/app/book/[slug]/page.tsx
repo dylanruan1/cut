@@ -1,3 +1,4 @@
+import { PoweredByCut } from "@/components/shared/powered-by-cut";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import {
@@ -147,9 +148,7 @@ export default async function PublicBookingPage({
             Help
           </a>
         </p>
-        <p className="text-xs text-muted-foreground">
-          Powered by <span className="font-medium">Cut.</span>
-        </p>
+        <PoweredByCut />
       </footer>
     </div>
   );
