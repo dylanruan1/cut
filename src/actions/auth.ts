@@ -13,6 +13,7 @@ import { createBarbershopWithOwner, createDevTestShop2ForUser } from "@/lib/barb
 import { DEFAULT_SERVICES } from "@/lib/dates";
 import { UserRole } from "@prisma/client";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser, requireUser, switchActiveBarbershop } from "@/lib/auth";
 import { sanitizeInternalRedirect } from "@/lib/safe-redirect";
@@ -20,6 +21,27 @@ import { rateLimit } from "@/lib/rate-limit";
 
 function appUrl() {
   return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
+}
+
+/**
+ * The origin the browser actually requested, from the proxy headers.
+ *
+ * Preferred over NEXT_PUBLIC_APP_URL for auth redirects: a stale or wrong env
+ * var there sends the session cookie to a different host, which looks to the
+ * user like sign-in silently doing nothing. Falls back to the env var when the
+ * headers are unavailable.
+ */
+async function requestOrigin(): Promise<string> {
+  try {
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    if (!host) return appUrl();
+    const proto =
+      h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+    return `${proto}://${host}`;
+  } catch {
+    return appUrl();
+  }
 }
 
 /** Resolve where a user should land after auth. */
@@ -253,10 +275,22 @@ export async function signInWithMagicLink(formData: FormData) {
 
 export async function signInWithOAuth(provider: "google") {
   const supabase = await createClient();
+
+  // Return to the domain the user is actually on, not whatever
+  // NEXT_PUBLIC_APP_URL happens to say.
+  //
+  // That env var pointed at the Vercel preview domain, so OAuth completed
+  // successfully and then handed the session cookie to a different host — the
+  // user landed back on cutchair.com with no session and no error, apparently
+  // "not signed in". Deriving the origin from the request makes the redirect
+  // correct on the custom domain, on preview URLs, and on localhost, with
+  // nothing to configure.
+  const origin = await requestOrigin();
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
-      redirectTo: `${appUrl()}/auth/callback?next=/dashboard`,
+      redirectTo: `${origin}/auth/callback?next=/dashboard`,
     },
   });
 
