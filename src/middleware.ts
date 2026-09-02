@@ -8,6 +8,12 @@ const publicRoutes = [
   "/forgot-password",
   "/reset-password",
   "/verify-email",
+  // The OAuth and email-verification callback. MUST be public: it is what
+  // creates the session, so requiring one first is circular. Without this,
+  // middleware redirected /auth/callback?code=... to /login before the code
+  // could be exchanged, and Google sign-in looped forever while Supabase
+  // logged a successful login every time.
+  "/auth",
   "/invite",
   "/pricing",
   // Customer-facing booking pages must work without an account.
