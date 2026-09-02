@@ -1,5 +1,6 @@
 import { PoweredByCut } from "@/components/shared/powered-by-cut";
-import { notFound } from "next/navigation";
+import { resolveSlugAlias } from "@/lib/shop-slug";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getQueueShop } from "@/actions/queue";
 import { JoinQueueForm } from "@/components/queue/join-queue-form";
@@ -21,7 +22,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function QueuePage({ params }: Props) {
   const { slug } = await params;
   const shop = await getQueueShop(slug);
-  if (!shop) notFound();
+
+  if (!shop) {
+    // Printed QR codes outlive shop names — a retired slug redirects rather
+    // than 404s. See src/lib/shop-slug.ts.
+    const current = await resolveSlugAlias(slug);
+    if (current) redirect(`/q/${current}`);
+    notFound();
+  }
 
   return (
     <div className="min-h-screen bg-background">

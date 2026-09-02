@@ -93,3 +93,40 @@ export function validateSlug(raw: string): SlugCheck {
 export function bookingUrl(appUrl: string, slug: string): string {
   return `${appUrl.replace(/\/$/, "")}/book/${slug}`;
 }
+
+/** Fallback when a shop name produces nothing usable, e.g. "!!!" or "123". */
+const FALLBACK_BASE = "shop";
+
+/**
+ * The slug a shop should have, given its name and what's already taken.
+ *
+ * Two shops called "Fades" get `fades` and `fades-2`. The number is appended
+ * only on collision, so the first shop with a name keeps the clean link.
+ *
+ * `taken` must include other shops' current slugs AND every retired alias —
+ * handing out a slug that used to point somewhere else would send a customer
+ * with an old link to the wrong barbershop.
+ */
+export function uniqueSlugFor(name: string, taken: Set<string>): string {
+  let base = toSlug(name);
+
+  // An empty or all-digit base is unusable: "123" reads as broken to a
+  // customer and is rejected by validateSlug.
+  if (!base || base.length < SLUG_MIN || /^\d+$/.test(base)) {
+    base = base ? `${FALLBACK_BASE}-${base}`.slice(0, SLUG_MAX) : FALLBACK_BASE;
+  }
+  if (RESERVED.has(base)) base = `${base}-shop`;
+
+  if (!taken.has(base)) return base;
+
+  // Cap the search so a pathological case can't spin. 999 shops sharing one
+  // name is not a real scenario, and falling back to a timestamp is better
+  // than looping.
+  for (let n = 2; n <= 999; n++) {
+    const suffix = `-${n}`;
+    const candidate = `${base.slice(0, SLUG_MAX - suffix.length)}${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+
+  return `${base.slice(0, SLUG_MAX - 14)}-${Date.now().toString(36)}`;
+}

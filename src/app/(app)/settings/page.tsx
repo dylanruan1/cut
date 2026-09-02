@@ -30,7 +30,7 @@ export default async function SettingsPage() {
         voiceWebhookUrl={getVoiceWebhookUrl()}
         aiUnlocked={canUseAiReceptionist(subscription)}
       />
-      <BookingLinkCard initialSlug={shop?.slug ?? ""} canManage={isOwner} />
+      <BookingLinkCard slug={shop?.slug ?? ""} />
 
       {/* Hidden while deletion is already scheduled — the banner owns that
           state, and offering "delete" again would just confuse. */}

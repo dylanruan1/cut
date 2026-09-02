@@ -1,5 +1,6 @@
 import { PoweredByCut } from "@/components/shared/powered-by-cut";
-import { notFound } from "next/navigation";
+import { resolveSlugAlias } from "@/lib/shop-slug";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import {
   getPublicShop,
@@ -40,7 +41,15 @@ export default async function PublicBookingPage({
   const { slug } = await params;
   const { deposit, appointment: appointmentId } = await searchParams;
   const shop = await getPublicShop(slug);
-  if (!shop) notFound();
+
+  if (!shop) {
+    // The shop may have been renamed since this link was shared — on a QR
+    // sticker, in an Instagram bio, or in a confirmation text already sent.
+    // Retired slugs redirect rather than 404.
+    const current = await resolveSlugAlias(slug);
+    if (current) redirect(`/book/${current}`);
+    notFound();
+  }
 
   // Returning from Stripe Checkout after paying a deposit.
   const paid =

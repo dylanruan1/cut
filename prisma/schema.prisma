@@ -153,6 +153,7 @@ model Barbershop {
   receptionistCallSessions ReceptionistCallSession[]
   queueEntries             QueueEntry[]
   waitlistEntries          WaitlistEntry[]
+  slugAliases              ShopSlugAlias[]
 
   @@map("barbershops")
 }
@@ -453,6 +454,23 @@ model Invitation {
 
   @@index([barbershopId])
   @@map("invitations")
+}
+
+/// A booking link a shop used to have.
+///
+/// The slug is regenerated whenever the shop is renamed, which would otherwise
+/// break every QR sticker in a window, every Instagram bio, and every link in a
+/// confirmation text already sent. Old slugs are kept here and redirected to
+/// the current one, so renaming is safe and nothing a customer holds goes dead.
+model ShopSlugAlias {
+  slug         String   @id
+  barbershopId String
+  createdAt    DateTime @default(now())
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([barbershopId])
+  @@map("shop_slug_aliases")
 }
 
 /// Numbers that replied STOP.

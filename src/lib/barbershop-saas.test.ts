@@ -48,6 +48,14 @@ const prismaMock = vi.hoisted(() => ({
   notification: {
     findMany: vi.fn(),
   },
+  // Retired booking links. updateShopSettings regenerates the slug from the
+  // shop name and stores the old one as a redirect, so it reads and writes
+  // here on every save.
+  shopSlugAlias: {
+    findMany: vi.fn(async () => []),
+    upsert: vi.fn(),
+    deleteMany: vi.fn(),
+  },
   $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
 }));
 
@@ -821,12 +829,19 @@ describe("data isolation between shops", () => {
       stripeSubscriptionId: null,
       stripePriceId: null,
       currentPeriodEnd: null,
+      // updateShopSettings calls findUniqueOrThrow twice — once for the
+      // subscription check, then again inside syncSlugToName for the current
+      // slug. One mock serves both, so it needs the slug too.
+      slug: "test-shop-2",
     });
     prismaMock.barbershop.update.mockResolvedValue({
       ...testShop2,
       twilioPhone: null,
       phoneSetupStatus: "NOT_STARTED",
     });
+    // syncSlugToName lists other shops' slugs to pick a free one. Empty means
+    // nothing is taken, so the slug stays as it is.
+    prismaMock.barbershop.findMany.mockResolvedValue([]);
 
     const { updateShopSettings } = await import("@/actions/appointments");
     await updateShopSettings({

@@ -3,6 +3,7 @@
 import prisma from "@/lib/db";
 import { requireShopUser, canManageShop } from "@/lib/auth";
 import { appointmentSchema, serviceSchema, shopSettingsSchema, inviteSchema } from "@/lib/validators";
+import { syncSlugToName } from "@/lib/shop-slug";
 import { addMinutes } from "@/lib/dates";
 import { revalidatePath } from "next/cache";
 import {
@@ -430,8 +431,15 @@ export async function updateShopSettings(data: unknown) {
     },
   });
 
+  // Keep the booking link in step with the name. The old slug is retained as a
+  // redirect, so links already printed on a QR sticker or sitting in a
+  // customer's text messages keep working.
+  const slug = await syncSlugToName(user.barbershopId, parsed.data.name);
+
   revalidatePath("/settings");
-  return { success: true, shop: serializeForClient(shop) };
+  revalidatePath("/dashboard");
+  revalidatePath("/queue-code");
+  return { success: true, shop: serializeForClient({ ...shop, slug }) };
 }
 
 export async function inviteTeamMember(data: unknown) {

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { toSlug, validateSlug, bookingUrl, SLUG_MAX } from "./booking-slug";
+import {
+  toSlug,
+  validateSlug,
+  bookingUrl,
+  uniqueSlugFor,
+  SLUG_MAX,
+} from "./booking-slug";
 
 describe("toSlug", () => {
   it("converts a shop name into a link", () => {
@@ -65,6 +71,56 @@ describe("validateSlug", () => {
 
   it("allows digits mixed with letters", () => {
     expect(validateSlug("shop-101").ok).toBe(true);
+  });
+});
+
+describe("uniqueSlugFor", () => {
+  it("uses the plain slug when nothing is taken", () => {
+    expect(uniqueSlugFor("Fades Barbershop", new Set())).toBe("fades-barbershop");
+  });
+
+  it("appends 2 for the second shop with the same name", () => {
+    expect(uniqueSlugFor("Fades", new Set(["fades"]))).toBe("fades-2");
+  });
+
+  it("keeps counting past the second", () => {
+    const taken = new Set(["fades", "fades-2", "fades-3"]);
+    expect(uniqueSlugFor("Fades", taken)).toBe("fades-4");
+  });
+
+  it("rescues a name that slugs to nothing", () => {
+    expect(uniqueSlugFor("!!!", new Set())).toBe("shop");
+    expect(uniqueSlugFor("", new Set(["shop"]))).toBe("shop-2");
+  });
+
+  it("rescues an all-digit name", () => {
+    // The exact live case: a shop called 23423423423432.
+    const slug = uniqueSlugFor("23423423423432", new Set());
+    expect(slug.startsWith("shop-")).toBe(true);
+    expect(validateSlug(slug).ok).toBe(true);
+  });
+
+  it("avoids reserved words", () => {
+    expect(uniqueSlugFor("Support", new Set())).toBe("support-shop");
+  });
+
+  it("never returns something validateSlug would reject", () => {
+    const names = ["Fades", "!!!", "123456", "Support", "A", "Ünïcodé Cuts"];
+    for (const name of names) {
+      const slug = uniqueSlugFor(name, new Set());
+      expect(validateSlug(slug), `${name} -> ${slug}`).toEqual({
+        ok: true,
+        slug,
+      });
+    }
+  });
+
+  it("stays within the length limit when numbering", () => {
+    const long = "a".repeat(SLUG_MAX);
+    const taken = new Set([long]);
+    const next = uniqueSlugFor(long, taken);
+    expect(next.length).toBeLessThanOrEqual(SLUG_MAX);
+    expect(next.endsWith("-2")).toBe(true);
   });
 });
 
