@@ -15,7 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { signIn, signInWithMagicLink, signInWithOAuth } from "@/actions/auth";
+import { signIn, signInWithMagicLink } from "@/actions/auth";
+import { startGoogleSignIn } from "@/lib/oauth-client";
 import { toast } from "@/hooks/use-toast";
 
 export default function LoginPageInner() {
@@ -82,19 +83,23 @@ export default function LoginPageInner() {
   async function handleGoogle() {
     setOauthLoading(true);
     try {
-      const result = await signInWithOAuth("google");
+      // Browser-side on purpose — see startGoogleSignIn. On success the
+      // Supabase client navigates to Google itself, so nothing follows.
+      const result = await startGoogleSignIn(redirectTo);
       if (result?.error) {
         toast({
           title: "Google sign-in unavailable",
           description: result.error,
           variant: "destructive",
         });
-        return;
+        setOauthLoading(false);
       }
-      if (result?.url) {
-        window.location.href = result.url;
-      }
-    } finally {
+    } catch (err) {
+      toast({
+        title: "Google sign-in failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
       setOauthLoading(false);
     }
   }

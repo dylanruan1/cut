@@ -16,6 +16,17 @@ export async function GET(request: Request) {
   if (code) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+    // Log the real reason. This used to fail silently and bounce to /login
+    // with a generic flag, which made a PKCE verifier problem look like
+    // "Google sign-in just doesn't work".
+    if (error) {
+      console.error("[auth/callback] code exchange failed", {
+        message: error.message,
+        status: error.status,
+      });
+    }
+
     if (!error && data.user) {
       const email = data.user.email;
       if (email) {

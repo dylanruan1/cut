@@ -14,7 +14,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { signUp, signInWithOAuth } from "@/actions/auth";
+import { signUp } from "@/actions/auth";
+import { startGoogleSignIn } from "@/lib/oauth-client";
 import { toast } from "@/hooks/use-toast";
 
 export default function SignUpPage() {
@@ -41,17 +42,21 @@ export default function SignUpPage() {
   async function handleGoogle() {
     setOauthLoading(true);
     try {
-      const result = await signInWithOAuth("google");
+      const result = await startGoogleSignIn("/dashboard");
       if (result?.error) {
         toast({
           title: "Google sign-up unavailable",
           description: result.error,
           variant: "destructive",
         });
-        return;
+        setOauthLoading(false);
       }
-      if (result?.url) window.location.href = result.url;
-    } finally {
+    } catch (err) {
+      toast({
+        title: "Google sign-up failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
       setOauthLoading(false);
     }
   }
