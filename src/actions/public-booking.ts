@@ -107,6 +107,8 @@ export type PublicShop = {
   barbers: Array<{
     id: string;
     name: string;
+    /** Handle for their personal link, /book/{shop}/{slug}. */
+    slug: string | null;
     photoUrl: string | null;
     workingHours: Array<{
       dayOfWeek: number;
@@ -244,6 +246,7 @@ export async function getPublicShop(slug: string): Promise<PublicShop | null> {
     barbers: shop.barbers.map((b) => ({
       id: b.id,
       name: b.name,
+      slug: b.slug,
       photoUrl: b.photoUrl,
       // Defensive: empty means "no restriction" in findAvailability.
       workingHours: b.workingHours ?? [],

@@ -5,6 +5,7 @@ import prisma from "@/lib/db";
 import { TeamManager } from "@/components/team/team-manager";
 import { FeatureLocked } from "@/components/billing/feature-locked";
 import { serializeForClient } from "@/lib/serializers";
+import { backfillBarberSlugs } from "@/lib/barber-slug";
 
 export default async function TeamPage() {
   const { user, shop } = await requireActiveSubscription();
@@ -20,7 +21,12 @@ export default async function TeamPage() {
     );
   }
 
-  const [barbers, invitations] = await Promise.all([
+  // Barbers created before personal links existed have no handle. Filling them
+  // in here means nobody has to run a migration, and the owner sees a working
+  // link the first time they look for one.
+  await backfillBarberSlugs(user.barbershopId);
+
+  const [barbers, invitations, shopRecord] = await Promise.all([
     prisma.barber.findMany({
       where: { barbershopId: user.barbershopId, isActive: true },
       orderBy: { name: "asc" },
@@ -28,6 +34,10 @@ export default async function TeamPage() {
     prisma.invitation.findMany({
       where: { barbershopId: user.barbershopId, status: "PENDING" },
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.barbershop.findUnique({
+      where: { id: user.barbershopId },
+      select: { slug: true },
     }),
   ]);
 
@@ -45,6 +55,7 @@ export default async function TeamPage() {
       barbers={barbersForClient}
       invitations={serializeForClient(invitations)}
       canManage={canManageShop(user.role)}
+      shopSlug={shopRecord?.slug ?? ""}
     />
   );
 }

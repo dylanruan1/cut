@@ -37,6 +37,8 @@ import {
 interface Barber {
   id: string;
   name: string;
+  /** Handle for their personal booking link. Null until backfilled. */
+  slug?: string | null;
   email: string;
   phone: string | null;
   photoUrl: string | null;
@@ -60,9 +62,15 @@ interface TeamManagerProps {
   barbers: Barber[];
   invitations: Invitation[];
   canManage: boolean;
+  shopSlug: string;
 }
 
-export function TeamManager({ barbers, invitations, canManage }: TeamManagerProps) {
+export function TeamManager({
+  barbers,
+  invitations,
+  canManage,
+  shopSlug,
+}: TeamManagerProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [role, setRole] = useState<"BARBER" | "RECEPTIONIST">("BARBER");
@@ -167,6 +175,9 @@ export function TeamManager({ barbers, invitations, canManage }: TeamManagerProp
                       barberName={barber.name}
                     />
                   </div>
+                  {barber.slug && (
+                    <BarberLink shopSlug={shopSlug} barberSlug={barber.slug} />
+                  )}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -249,6 +260,65 @@ export function TeamManager({ barbers, invitations, canManage }: TeamManagerProp
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * A barber's personal booking link.
+ *
+ * Shown on their card so the owner can hand it straight to them. The whole
+ * point is that the barber puts it in their own Instagram bio — a shop with
+ * six chairs then has six people promoting it instead of one.
+ */
+function BarberLink({
+  shopSlug,
+  barberSlug,
+}: {
+  shopSlug: string;
+  barberSlug: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [url, setUrl] = useState("");
+
+  useEffect(() => {
+    setUrl(`${window.location.origin}/book/${shopSlug}/${barberSlug}`);
+  }, [shopSlug, barberSlug]);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ title: "Couldn't copy", variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="text-xs font-medium text-muted-foreground">
+        Their booking link
+      </p>
+      <div className="mt-1 flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate border bg-muted/40 px-2 py-1.5 text-xs">
+          {url || "…"}
+        </code>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          disabled={!url}
+          onClick={copy}
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

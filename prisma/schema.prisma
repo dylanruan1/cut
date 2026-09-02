@@ -209,6 +209,11 @@ model Barber {
   /// type it on the *customer's* phone to confirm a cash payment — no device or
   /// app needed at the station. Never stored or returned in plain text.
   verifyPinHash String?
+  /// Handle for this barber's personal booking link, /book/{shop}/{slug}.
+  /// Generated from their name and unique within the shop. Nullable because
+  /// barbers created before this feature have none until their name is next
+  /// saved; the shop link still works for them meanwhile.
+  slug         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -220,6 +225,8 @@ model Barber {
   queueEntries    QueueEntry[]
   favoriteClients Client[]        @relation("FavoriteBarber")
 
+  /// Unique per shop, not globally — two shops can each have a "mike".
+  @@unique([barbershopId, slug])
   @@index([barbershopId])
   @@map("barbers")
 }
