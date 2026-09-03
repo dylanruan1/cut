@@ -175,7 +175,9 @@ export function ServicesManager({ services: initialServices, canManage }: Servic
               <Label htmlFor="description">Description</Label>
               <Textarea id="description" name="description" defaultValue={editing?.description ?? ""} />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            {/* Two up on a phone (Duration + Price fit side by side at 375px),
+                three up from sm. Deposit spans the full row on mobile. */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="duration">Duration (min)</Label>
                 <Input id="duration" name="duration" type="number" min={5} defaultValue={editing?.duration ?? 30} required />

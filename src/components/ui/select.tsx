@@ -14,7 +14,9 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-11 w-full items-center justify-between rounded-xl border border-input bg-background px-4 py-2 text-sm shadow-soft ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      // text-base on mobile: see the note in input.tsx — under 16px iOS
+      // Safari zooms the page on focus and does not zoom back out.
+      "flex h-11 w-full items-center justify-between rounded-xl border border-input bg-background px-4 py-2 text-base sm:text-sm shadow-soft ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
       className
     )}
     {...props}

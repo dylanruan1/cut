@@ -120,7 +120,9 @@ export function ClientSearch() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-3 gap-4">
+                {/* Three stat cards at 375px leaves ~100px each, which wraps
+                    "Lifetime visits" onto three lines and clips dates. */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                   <div className="rounded-xl bg-muted/50 p-4 text-center">
                     <p className="text-2xl font-semibold">{selected.visitCount}</p>
                     <p className="text-xs text-muted-foreground">Lifetime visits</p>

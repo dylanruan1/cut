@@ -32,7 +32,18 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border bg-background p-6 shadow-glass duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
+        // Mobile sizing, which the stock shadcn dialog gets wrong in two ways:
+        //
+        // 1. `w-full` with no inset makes the dialog touch both screen edges on
+        //    a phone. `w-[calc(100%-2rem)]` leaves a 1rem gutter each side.
+        // 2. No height cap. A form taller than the viewport ran off the bottom
+        //    of the screen with nothing to scroll, so the Save button was
+        //    literally unreachable on a phone. `max-h` + `overflow-y-auto`
+        //    keeps it inside the viewport.
+        //
+        // svh (not vh) because mobile Safari's vh includes the address bar,
+        // which is exactly the strip that hides the buttons.
+        "fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-w-lg max-h-[calc(100svh-2rem)] overflow-y-auto translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border bg-background p-4 sm:p-6 shadow-glass duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
         className
       )}
       {...props}
@@ -53,7 +64,15 @@ const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 DialogHeader.displayName = "DialogHeader";
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)} {...props} />
+  // gap-2 on mobile: stacked buttons otherwise sit flush against each other,
+  // which reads as one control and makes Cancel easy to hit by accident.
+  <div
+    className={cn(
+      "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2",
+      className
+    )}
+    {...props}
+  />
 );
 DialogFooter.displayName = "DialogFooter";
 

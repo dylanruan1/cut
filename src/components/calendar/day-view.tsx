@@ -80,7 +80,19 @@ export function DayView({
 
   return (
     <div className="flex overflow-x-auto">
-      <div className="w-16 shrink-0 border-r">
+      {/* sticky left-0: with several barbers this row scrolls sideways on a
+          phone, and without this the hour labels scrolled away with it, so
+          columns two and three had no times attached to them at all. */}
+      <div className="sticky left-0 z-20 w-16 shrink-0 border-r bg-card">
+        {/* Spacer matching the barber-name header exactly — same padding, same
+            text size. Without it the hour labels sat one header-height above
+            the rows they label. */}
+        <div
+          className="flex items-center justify-center border-b bg-card p-2"
+          aria-hidden="true"
+        >
+          <span className="text-sm font-medium">&nbsp;</span>
+        </div>
         {hours.map((hour) => (
           <div
             key={hour}

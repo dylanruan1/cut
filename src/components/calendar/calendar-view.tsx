@@ -30,6 +30,17 @@ interface CalendarViewProps {
 export function CalendarView({ barbers, services, timezone }: CalendarViewProps) {
   const [view, setView] = useState<"day" | "week" | "month">("week");
   const [currentDate, setCurrentDate] = useState(new Date());
+  // Week view is a 700px-wide grid. On a phone that meant two screens of
+  // sideways scrolling before you could see a single appointment, so open on
+  // Day instead. Done in an effect rather than in the useState initializer
+  // because the server has no viewport and would hydrate a mismatch. Only
+  // fires on mount, so tapping "Week" afterwards still sticks.
+  const [pickedView, setPickedView] = useState(false);
+  useEffect(() => {
+    if (pickedView) return;
+    if (window.matchMedia("(max-width: 640px)").matches) setView("day");
+    setPickedView(true);
+  }, [pickedView]);
   const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
   const [filterBarber, setFilterBarber] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -150,7 +161,9 @@ export function CalendarView({ barbers, services, timezone }: CalendarViewProps)
       </div>
 
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+        {/* min-w-0 + truncate: month titles like "September 2026" pushed this
+            row wider than a phone screen and scrolled the whole page sideways. */}
+        <div className="flex min-w-0 items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => navigate("today")}>
             Today
           </Button>
@@ -160,22 +173,26 @@ export function CalendarView({ barbers, services, timezone }: CalendarViewProps)
           <Button variant="ghost" size="icon" onClick={() => navigate("next")} aria-label="Next">
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <h2 className="text-lg font-medium ml-2">{getTitle()}</h2>
+          <h2 className="ml-2 truncate text-lg font-medium">{getTitle()}</h2>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+        {/* On a phone: search gets its own full-width row, then barber filter
+            and the day/week/month tabs share the row below. Fixed w-48/w-40
+            widths only apply from sm up, where there is room for them. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative w-full sm:w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search appointments..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 w-48"
+              className="w-full pl-9"
               aria-label="Search appointments"
             />
           </div>
+          <div className="flex items-center gap-2">
           <Select value={filterBarber} onValueChange={setFilterBarber}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="min-w-0 flex-1 sm:w-40 sm:flex-none">
               <SelectValue placeholder="All barbers" />
             </SelectTrigger>
             <SelectContent>
@@ -197,6 +214,7 @@ export function CalendarView({ barbers, services, timezone }: CalendarViewProps)
               <TabsTrigger value="month">Month</TabsTrigger>
             </TabsList>
           </Tabs>
+          </div>
         </div>
       </div>
 
