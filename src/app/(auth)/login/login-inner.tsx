@@ -83,17 +83,9 @@ export default function LoginPageInner() {
   async function handleGoogle() {
     setOauthLoading(true);
     try {
-      // Browser-side on purpose — see startGoogleSignIn. On success the
-      // Supabase client navigates to Google itself, so nothing follows.
-      const result = await startGoogleSignIn(redirectTo);
-      if (result?.error) {
-        toast({
-          title: "Google sign-in unavailable",
-          description: result.error,
-          variant: "destructive",
-        });
-        setOauthLoading(false);
-      }
+      // Full navigation to the server route that owns the PKCE flow.
+      startGoogleSignIn(redirectTo);
+      return;
     } catch (err) {
       toast({
         title: "Google sign-in failed",

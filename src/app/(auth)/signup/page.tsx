@@ -42,15 +42,8 @@ export default function SignUpPage() {
   async function handleGoogle() {
     setOauthLoading(true);
     try {
-      const result = await startGoogleSignIn("/dashboard");
-      if (result?.error) {
-        toast({
-          title: "Google sign-up unavailable",
-          description: result.error,
-          variant: "destructive",
-        });
-        setOauthLoading(false);
-      }
+      startGoogleSignIn("/dashboard");
+      return;
     } catch (err) {
       toast({
         title: "Google sign-up failed",
