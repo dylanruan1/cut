@@ -8,6 +8,8 @@ import { canManageShop } from "@/lib/auth";
 import prisma from "@/lib/db";
 import { DeletionBanner } from "@/components/settings/deletion-banner";
 import { daysUntilPurge } from "@/lib/account-deletion";
+import { getFoundingStatus } from "@/lib/founding";
+import { FOUNDING_SHOP_LIMIT } from "@/lib/subscription";
 
 export default async function PricingPage({
   searchParams,
@@ -38,6 +40,7 @@ export default async function PricingPage({
     canCheckout = false;
   }
 
+  const founding = await getFoundingStatus();
   const stripeConfigured = isStripeConfigured();
   const highlighted =
     params.plan === "STARTER" ||
@@ -111,12 +114,44 @@ export default async function PricingPage({
           </div>
         )}
 
+        {founding.available && (
+          <div className="border-2 border-foreground px-5 py-4 text-center">
+            <p className="text-lg font-semibold tracking-tight">
+              Founding shops: ${founding.price}/mo, locked for life
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              <span className="nums">{founding.remaining}</span> of{" "}
+              <span className="nums">{FOUNDING_SHOP_LIMIT}</span> left. After
+              that the AI Receptionist plan is ${founding.listPrice}. Founders
+              keep ${founding.price} for as long as they stay.
+            </p>
+          </div>
+        )}
+
         <PricingCards
           currentPlan={currentPlan}
           stripeConfigured={stripeConfigured}
           canCheckout={!!user && canCheckout}
           highlightedPlan={highlighted}
         />
+
+        {/* The actual competitive argument, and the reason it is stated in
+            dollars rather than as a feature bullet. Squire bills $1–3 on every
+            booking on top of subscription; at 400 cuts a month that is $400–1,200
+            a shop pays them and does not pay us. A shop owner comparing two
+            $99 plans cannot see that difference unless we do this arithmetic
+            for them. */}
+        <div className="mx-auto max-w-2xl border-t pt-8 text-center">
+          <p className="text-lg font-medium tracking-tight">
+            No charge per booking. Not now, not later.
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Most booking software takes $1–3 every time a customer books. At 400
+            cuts a month that is $400 to $1,200 on top of what you already pay
+            them. Cut takes none of it — you pay the monthly price and keep
+            everything Stripe doesn&apos;t take.
+          </p>
+        </div>
 
         <p className="text-center text-sm text-muted-foreground max-w-xl mx-auto">
           Start booking automatically with the AI Receptionist plan — connect a Twilio number,

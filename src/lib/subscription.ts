@@ -28,6 +28,55 @@ export type ShopSubscriptionSnapshot = {
 };
 
 /**
+ * Per-barber price above a plan's included seats.
+ *
+ * A seat costs us almost nothing — the marginal cost of another barber is a few
+ * more reminder texts. $12 is priced against what a shop already pays per chair
+ * elsewhere, not against our cost.
+ */
+export const PER_BARBER_PRICE = 12;
+
+/**
+ * Founding price for the AI plan, locked for the life of the subscription.
+ *
+ * List stays $249. The first FOUNDING_SHOP_LIMIT shops to subscribe pay this
+ * instead, forever. The point is a real reason to sign up today rather than
+ * think about it, without permanently discounting every future customer.
+ */
+export const FOUNDING_AI_PRICE = 199;
+export const FOUNDING_SHOP_LIMIT = 25;
+
+/**
+ * Usage ceilings for the AI receptionist.
+ *
+ * These are NOT a billing device — nobody is ever charged for going over. They
+ * exist because of where the money actually goes on a call:
+ *
+ *   Twilio speech recognition   7 turns × $0.02  = $0.140
+ *   Twilio inbound voice        3 min × $0.0085  = $0.026
+ *   Claude Haiku                20k in / 1.2k out = $0.026
+ *                                                  -------
+ *                                        per call ≈ $0.19
+ *
+ * Against $249/mo with a typical shop's texts and fixed costs, break-even lands
+ * near 1,150 answered calls a month — about 38 a day, every day. No real
+ * barbershop reaches that. A shop doing 400 haircuts would need three phone
+ * calls per booking.
+ *
+ * So the only thing that gets us to a loss is abuse: robocallers hammering the
+ * number, or a call loop. Charging a shop for that would be billing them for
+ * something they never asked for, which is why WARN is a private signal to us
+ * and CEILING only trips in territory that is already obviously wrong.
+ *
+ * At CEILING (900 calls) we are down to roughly $19 of margin — still positive,
+ * which is deliberate. The stop should fire while there is still room, not
+ * after the money is gone.
+ */
+export const AI_CALLS_WARN_THRESHOLD = 300;
+export const AI_CALLS_HARD_CEILING = 900;
+export const SMS_WARN_THRESHOLD = 1500;
+
+/**
  * Plan pricing and copy.
  *
  * Prices live here rather than only in Stripe so the pricing page can state a
@@ -51,6 +100,8 @@ export const PLAN_DISPLAY: Record<
     highlight?: boolean;
     /** Shown under the price where it needs justifying. */
     priceNote?: string;
+    /** Barbers included before per-seat billing starts. Null = no cap. */
+    includedBarbers?: number | null;
   }
 > = {
   NONE: {
@@ -63,6 +114,7 @@ export const PLAN_DISPLAY: Record<
     name: "Starter",
     subtitle: "For a solo barber.",
     monthlyPrice: 39,
+    includedBarbers: 1,
     features: [
       "Online booking page",
       "Walk-in queue with QR code",
@@ -70,24 +122,29 @@ export const PLAN_DISPLAY: Record<
       "Client list and services",
       "Deposits and no-show protection",
       "No fees on payments — you keep what Stripe doesn't take",
+      "No charge per booking, ever",
     ],
   },
   PRO: {
     name: "Pro",
     subtitle: "For a shop with a team.",
     monthlyPrice: 99,
+    includedBarbers: 6,
+    priceNote: `Up to 6 barbers, then $${PER_BARBER_PRICE} each.`,
     features: [
       "Everything in Starter",
-      "Up to 6 barbers",
+      "Up to 6 barbers included",
       "Team management and permissions",
       "Revenue and no-show analytics",
       "Multi-barber calendar",
+      "Cancellation waitlist included — competitors charge extra",
     ],
   },
   AI_RECEPTIONIST: {
     name: "AI Receptionist",
     subtitle: "Nobody misses a call again.",
     monthlyPrice: 249,
+    includedBarbers: 6,
     priceNote:
       "Pays for itself at about six recovered calls a month.",
     features: [

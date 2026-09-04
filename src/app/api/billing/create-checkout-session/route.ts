@@ -5,12 +5,14 @@ import { canManageShop } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/auth";
 import {
   getAppUrl,
+  getFoundingPriceId,
   getPriceIdForPlan,
   getStripe,
   isStripeConfigured,
 } from "@/lib/stripe";
 import { isBillablePlan } from "@/lib/subscription";
 import { rateLimit } from "@/lib/rate-limit";
+import { claimFoundingSlot } from "@/lib/founding";
 
 export async function POST(request: NextRequest) {
   try {
@@ -70,17 +72,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const priceId = getPriceIdForPlan(plan);
+    const shop = await prisma.barbershop.findUniqueOrThrow({
+      where: { id: user.barbershopId },
+    });
+
+    // Founding pricing. Only the AI plan has it, and only while slots remain
+    // or this shop already holds one.
+    //
+    // The slot is claimed BEFORE Stripe is called, and deliberately not undone
+    // if checkout is abandoned. Claiming after a successful payment would mean
+    // two people at the same checkout screen could each be quoted the founding
+    // price and only one would get it — the other would be silently charged
+    // more than the page promised. Over-granting a slot costs $50 a month;
+    // charging someone a price they did not agree to costs a customer.
+    const useFounding =
+      plan === "AI_RECEPTIONIST" && (await claimFoundingSlot(shop.id));
+
+    const priceId = useFounding
+      ? getFoundingPriceId()
+      : getPriceIdForPlan(plan);
     if (!priceId) {
       return NextResponse.json(
         { error: `Missing Stripe price id for plan ${plan}` },
         { status: 503 }
       );
     }
-
-    const shop = await prisma.barbershop.findUniqueOrThrow({
-      where: { id: user.barbershopId },
-    });
 
     let customerId = shop.stripeCustomerId;
     if (!customerId) {
@@ -115,12 +131,14 @@ export async function POST(request: NextRequest) {
         barbershopId: shop.id,
         userId: user.id,
         plan,
+        founding: String(useFounding),
       },
       subscription_data: {
         metadata: {
           barbershopId: shop.id,
           userId: user.id,
           plan,
+          founding: String(useFounding),
         },
         ...(trialDays ? { trial_period_days: trialDays } : {}),
       },

@@ -90,9 +90,14 @@ export function TeamManager({
       // Deliberately does NOT say "sent" — Cut has no email service, so nothing
       // was delivered. The link now lives in the Pending list, where it can be
       // copied at any time.
+      // The seat notice rides along with the success toast rather than
+      // interrupting with its own. Adding a barber succeeded; the price is
+      // information, not a problem, and a second popup would read as one.
       toast({
         title: "Invite link created",
-        description: "Copy it from the Pending list below and send it to them.",
+        description: result?.seatNotice
+          ? `Copy it from the Pending list below and send it to them. ${result.seatNotice}`
+          : "Copy it from the Pending list below and send it to them.",
       });
       setDialogOpen(false);
       window.location.reload();

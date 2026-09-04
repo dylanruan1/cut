@@ -14,6 +14,7 @@ import {
   resolveShopForTwilioTo,
   UNCONNECTED_NUMBER_MESSAGE,
 } from "@/lib/ai-receptionist/shop-resolve";
+import { canAnswerCallNow, maybeAlertHighUsage } from "@/lib/usage";
 import {
   AI_INACTIVE_VOICE_MESSAGE,
   canUseAiReceptionist,
@@ -75,7 +76,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Abuse ceiling, checked separately from "does this shop pay for the
+    // feature". A number being hammered by robocallers can run up real Twilio
+    // charges the shop never asked for, so past the ceiling we stop answering
+    // and say so rather than burning money silently. See subscription.ts for
+    // where the number comes from — no real barbershop reaches it.
+    if (!(await canAnswerCallNow(shop.id, subscription.currentPeriodEnd))) {
+      console.warn("[twilio/voice] usage ceiling reached, not answering", {
+        shopId: shop.id,
+      });
+      void maybeAlertHighUsage(shop.id, subscription.currentPeriodEnd);
+      return new NextResponse(
+        generateTwimlResponse(twimlSay(AI_INACTIVE_VOICE_MESSAGE)),
+        { headers: { "Content-Type": "text/xml" } }
+      );
+    }
+
     await ensureReceptionistSession(callSid, from, shop.id);
+
+    // Fire-and-forget: this is a monitoring signal for us, and the caller must
+    // not wait on it.
+    void maybeAlertHighUsage(shop.id, subscription.currentPeriodEnd);
 
     // Bilingual greeting: each sentence spoken by its own native voice so the
     // Spanish line isn't mispronounced by the English voice.

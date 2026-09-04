@@ -51,6 +51,28 @@ export function getPriceIdForPlan(plan: ShopPlan): string | null {
   return stripePriceEnvForPlan(plan)?.trim() || null;
 }
 
+/**
+ * Stripe price for a founding-member AI subscription.
+ *
+ * Falls back to the list AI price when unset, so a missing env var overcharges
+ * rather than crashing checkout — and deliberately not the reverse, since a
+ * misconfiguration that silently gave everyone the founding rate forever would
+ * be far harder to notice and impossible to claw back.
+ */
+export function getFoundingPriceId(): string | null {
+  return (
+    process.env.STRIPE_AI_FOUNDING_PRICE_ID?.trim() ||
+    getPriceIdForPlan("AI_RECEPTIONIST")
+  );
+}
+
+/**
+ * Stripe price for one barber seat above a plan's included count.
+ */
+export function getPerBarberPriceId(): string | null {
+  return process.env.STRIPE_PER_BARBER_PRICE_ID?.trim() || null;
+}
+
 export function getAppUrl(): string {
   return (
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||

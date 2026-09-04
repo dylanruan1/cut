@@ -58,7 +58,22 @@ if (!secretKey) {
 
 const stripe = new Stripe(secretKey, { typescript: true });
 
-type CutPlan = "STARTER" | "PRO" | "AI_RECEPTIONIST";
+/**
+ * AI_FOUNDING and PER_BARBER are not app plans — a shop's `plan` column never
+ * holds either. They are extra Stripe prices:
+ *
+ *   AI_FOUNDING  the locked-for-life rate for the first 25 shops
+ *   PER_BARBER   one seat above a plan's included barbers, added as a second
+ *                line item rather than its own subscription
+ *
+ * They live in the same list so one run creates everything and nothing drifts.
+ */
+type CutPlan =
+  | "STARTER"
+  | "PRO"
+  | "AI_RECEPTIONIST"
+  | "AI_FOUNDING"
+  | "PER_BARBER";
 
 type PlanConfig = {
   cutPlan: CutPlan;
@@ -93,6 +108,22 @@ const PLANS: PlanConfig[] = [
     amountCentsEnv: "STRIPE_AI_RECEPTIONIST_AMOUNT_CENTS",
     defaultAmountCents: 24900,
   },
+  {
+    cutPlan: "AI_FOUNDING",
+    name: "Cut — AI Receptionist (Founding)",
+    description:
+      "Founding-member rate for the AI Receptionist plan. Locked for the life of the subscription.",
+    amountCentsEnv: "STRIPE_AI_FOUNDING_AMOUNT_CENTS",
+    defaultAmountCents: 19900,
+  },
+  {
+    cutPlan: "PER_BARBER",
+    name: "Cut — Additional barber",
+    description:
+      "One barber beyond the barbers included in the plan. Billed per seat, per month.",
+    amountCentsEnv: "STRIPE_PER_BARBER_AMOUNT_CENTS",
+    defaultAmountCents: 1200,
+  },
 ];
 
 async function findExistingProduct(
@@ -121,6 +152,8 @@ async function main() {
     STARTER: "",
     PRO: "",
     AI_RECEPTIONIST: "",
+    AI_FOUNDING: "",
+    PER_BARBER: "",
   };
 
   for (const plan of PLANS) {
@@ -188,10 +221,16 @@ async function main() {
     results[plan.cutPlan] = price.id;
   }
 
-  console.log("\nAdd these lines to .env.local:\n");
+  console.log("\nAdd these lines to .env.local AND to Vercel:\n");
   console.log(`STRIPE_STARTER_PRICE_ID=${results.STARTER}`);
   console.log(`STRIPE_PRO_PRICE_ID=${results.PRO}`);
   console.log(`STRIPE_AI_RECEPTIONIST_PRICE_ID=${results.AI_RECEPTIONIST}`);
+  console.log(`STRIPE_AI_FOUNDING_PRICE_ID=${results.AI_FOUNDING}`);
+  console.log(`STRIPE_PER_BARBER_PRICE_ID=${results.PER_BARBER}`);
+  console.log(
+    "\nBoth places matter — .env.local only affects your machine. If Vercel\n" +
+      "keeps the old IDs, the live site charges the old amounts."
+  );
 }
 
 main().catch((err) => {

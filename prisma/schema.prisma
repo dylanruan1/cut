@@ -127,6 +127,11 @@ model Barbershop {
   stripePriceId        String?
   trialEndsAt          DateTime?
   currentPeriodEnd     DateTime?
+  /// When this shop claimed a founding-member slot on the AI plan, locking the
+  /// discounted price for the life of the subscription. Never cleared — a
+  /// founder who cancels does not release their slot, so the public counter can
+  /// only ever go down.
+  foundingClaimedAt    DateTime?
 
   /// Set when an owner asks to delete the shop. The shop is NOT gone yet — a
   /// daily job hard-deletes it once the grace window passes (see

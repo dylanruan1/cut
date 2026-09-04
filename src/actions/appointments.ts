@@ -23,6 +23,7 @@ import { isDoubleBookingError } from "@/lib/booking-conflict";
 import { serializeForClient } from "@/lib/serializers";
 import { getAppointmentClientName } from "@/lib/utils";
 import { UserRole } from "@prisma/client";
+import { PLAN_DISPLAY, PER_BARBER_PRICE } from "@/lib/subscription";
 
 export async function createAppointment(data: unknown) {
   const user = await requireShopUser();
@@ -471,6 +472,26 @@ export async function inviteTeamMember(data: unknown) {
   const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } });
   if (existing) return { error: "User already exists" };
 
+  // Seat check. Deliberately does not block — a shop hiring its seventh barber
+  // is a shop growing, and turning that into an error message is the worst
+  // possible moment to argue about money. They are told the price instead.
+  //
+  // Pending invitations count toward the total, otherwise sending five invites
+  // at once would each report "no extra charge" and the bill would arrive as a
+  // surprise.
+  const { checkAddBarber } = await import("@/lib/plan-limits");
+  const [barberCount, pendingInvites] = await Promise.all([
+    prisma.barber.count({ where: { barbershopId: user.barbershopId } }),
+    prisma.invitation.count({
+      where: {
+        barbershopId: user.barbershopId,
+        status: "PENDING",
+        expiresAt: { gt: new Date() },
+      },
+    }),
+  ]);
+  const seat = checkAddBarber(shop.plan, barberCount + pendingInvites);
+
   const invitation = await prisma.invitation.create({
     data: {
       barbershopId: user.barbershopId,
@@ -484,6 +505,9 @@ export async function inviteTeamMember(data: unknown) {
   return {
     success: true,
     inviteUrl: `${process.env.NEXT_PUBLIC_APP_URL}/invite/${invitation.token}`,
+    seatNotice: seat.billable
+      ? `This takes you past the ${PLAN_DISPLAY[shop.plan].includedBarbers} barbers included in ${PLAN_DISPLAY[shop.plan].name}. Your next bill goes up by $${PER_BARBER_PRICE}.`
+      : undefined,
   };
 }
 
