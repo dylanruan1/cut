@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { joinQueue, type QueueShop } from "@/actions/queue";
+import { SmsConsentCheckbox } from "@/components/shared/sms-consent-checkbox";
 import { Clock, Loader2 } from "lucide-react";
 
 export function JoinQueueForm({ shop }: { shop: QueueShop }) {
@@ -14,6 +15,7 @@ export function JoinQueueForm({ shop }: { shop: QueueShop }) {
   const [barberId, setBarberId] = useState<string>("any");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [smsConsent, setSmsConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -28,6 +30,7 @@ export function JoinQueueForm({ shop }: { shop: QueueShop }) {
         barberId,
         name,
         phone,
+        smsConsent,
       });
       if (res.error) {
         setError(res.error);
@@ -130,34 +133,22 @@ export function JoinQueueForm({ shop }: { shop: QueueShop }) {
               autoComplete="tel"
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              We&apos;ll text you when you&apos;re nearly up — go grab a coffee.
+              Tick below and we&apos;ll text you when you&apos;re nearly up — go
+              grab a coffee.
             </p>
             {/* A2P 10DLC call to action. Every place Cut collects a number for
-                texting needs visible consent, or carriers reject the campaign
-                and no SMS sends at all. See booking-wizard.tsx for the twin. */}
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              By joining, you agree to receive text messages about your place in
-              line. Message frequency varies. Message and data rates may apply.
-              Reply STOP to opt out or HELP for help. See our{" "}
-              <a
-                href="/privacy"
-                className="underline underline-offset-2"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Privacy Policy
-              </a>{" "}
-              and{" "}
-              <a
-                href="/terms"
-                className="underline underline-offset-2"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Terms
-              </a>
-              .
-            </p>
+                texting needs an affirmative opt-in, or carriers reject the
+                campaign and no SMS sends at all. Never required to join — see
+                booking-wizard.tsx for the twin. */}
+            <div className="mt-3">
+              <SmsConsentCheckbox
+                checked={smsConsent}
+                onChange={setSmsConsent}
+                shopName={shop.name}
+                context="queue"
+                id="sms-consent-queue"
+              />
+            </div>
           </div>
 
           <Button

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { WaitlistPrompt } from "@/components/booking/waitlist-prompt";
+import { SmsConsentCheckbox } from "@/components/shared/sms-consent-checkbox";
 
 type Step = "service" | "barber" | "time" | "details" | "done";
 
@@ -88,6 +89,7 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
+  const [smsConsent, setSmsConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [booked, setBooked] = useState<Booked | null>(null);
   const [pending, startTransition] = useTransition();
@@ -144,6 +146,7 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
         phone,
         email,
         notes,
+        smsConsent,
       });
       if (res.error) {
         setError(res.error);
@@ -169,7 +172,9 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
         </div>
         <h2 className="text-2xl font-semibold tracking-tight">You&apos;re booked!</h2>
         <p className="mt-2 text-muted-foreground">
-          We sent a confirmation text to {phone}.
+          {smsConsent
+            ? `We sent a confirmation text to ${phone}.`
+            : "Your appointment is in the book. You didn't ask for texts, so we won't send any."}
         </p>
         <div className="mt-6 space-y-2 rounded-xl border bg-background p-4 text-left text-sm">
           <Row label="Service" value={booked.serviceName} />
@@ -311,6 +316,7 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
               // a later cancellation into a filled chair.
               <WaitlistPrompt
                 slug={shop.slug}
+                shopName={shop.name}
                 serviceId={serviceId}
                 barberId={barberId === "any" ? undefined : barberId}
                 date={dateKey}
@@ -376,35 +382,18 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
                 inputMode="tel"
                 autoComplete="tel"
               />
-              {/* This is the A2P 10DLC "call to action". Carriers review the
-                  page where consent is collected and reject the campaign if
-                  they cannot see it — which is exactly why this registration
-                  failed before. It must stay visible, next to the phone field,
-                  and keep the frequency, rates, STOP/HELP and policy links. */}
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                By booking, you agree to receive appointment text messages from{" "}
-                {shop.name} at this number — confirmations, reminders, and
-                changes. Message frequency varies. Message and data rates may
-                apply. Reply STOP to opt out or HELP for help. See our{" "}
-                <a
-                  href="/privacy"
-                  className="underline underline-offset-2"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Privacy Policy
-                </a>{" "}
-                and{" "}
-                <a
-                  href="/terms"
-                  className="underline underline-offset-2"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Terms
-                </a>
-                .
-              </p>
+              {/* The A2P 10DLC call to action, now an act rather than a
+                  notice. It sits next to the phone field because that is where
+                  carriers look for it, and it never gates the button — see
+                  SmsConsentCheckbox. */}
+              <div className="mt-3">
+                <SmsConsentCheckbox
+                  checked={smsConsent}
+                  onChange={setSmsConsent}
+                  shopName={shop.name}
+                  context="booking"
+                />
+              </div>
             </div>
             <div>
               <Label htmlFor="email">Email (optional)</Label>

@@ -7,6 +7,9 @@ Twilio configuration:
 2. Call to Action (CTA) could not be verified
 3. Compliant privacy policy could not be verified
 4. Call to Action (CTA) could not be verified — again
+5. Error 30925 — opt-in was not affirmative: no dedicated, unchecked SMS
+   consent checkbox. The reviewer cited `/book/dev` and `/q/dev` by URL, so
+   the home-page link from fix #4 worked: they reached the forms this time.
 
 ## What was fixed in code
 
@@ -27,6 +30,16 @@ Twilio configuration:
 
 Both policy pages are served from `cutchair.com` itself. Linking to a
 third-party-hosted policy is a common rejection reason.
+
+- **Consent is now an affirmative act, not a notice.** Every form that takes a
+  mobile number renders `SmsConsentCheckbox`, unchecked, and `sendSms` refuses
+  to send without a matching `SmsConsent` row. This is what rejection #5 asked
+  for. Two constraints on anyone touching it:
+  - **It must never be pre-ticked.** That is the literal text of error 30925.
+  - **It must never be required to submit.** The registered opt-in answer says
+    consent is not a condition of purchase; a required box would contradict
+    what is filed with the carriers. Booking works with it untouched — the
+    customer simply gets no texts.
 
 **The demo booking link must stay working.** If the `dev` shop is deleted or
 its slug changes, the home page links 404 and the next review reads that as a
@@ -99,13 +112,18 @@ that is what failed twice.
 > https://cutchair.com/book/dev. Numbers are also collected on the walk-in
 > queue page, https://cutchair.com/q/dev, and when a customer asks to be
 > notified if a cancelled slot opens. Immediately beneath the mobile number
-> field, the form states: "By booking or joining the waitlist you agree to
-> receive appointment text messages from {shop name} at the number you provide.
-> Message frequency varies. Message and data rates may apply. Reply STOP to opt
-> out or HELP for help," with links to the Privacy Policy and Terms. Consent is
-> collected per booking, applies only to that barbershop, and is not a
-> condition of purchase. No numbers are purchased, rented, or shared from third
-> parties.
+> field is a dedicated SMS consent checkbox, unchecked by default, which the
+> customer must tick themselves. Its label reads: "Yes, text me. I agree to
+> receive appointment text messages — confirmations, reminders, and changes —
+> from {shop name} at the number I provide. Message frequency varies. Message
+> and data rates may apply. Reply STOP to opt out or HELP for help," with links
+> to the Privacy Policy and Terms. The checkbox is not required to complete a
+> booking: consent is not a condition of purchase, and a customer who leaves it
+> unticked is booked normally and receives no text messages. Nothing is sent
+> unless that box was ticked — the consent is stored per shop with its
+> timestamp and source, and message sending is blocked without it. Consent
+> applies only to that barbershop. No numbers are purchased, rented, or shared
+> from third parties.
 
 ### Opt-in keywords
 

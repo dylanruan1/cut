@@ -4,6 +4,7 @@ import { z } from "zod";
 import { headers } from "next/headers";
 import prisma from "@/lib/db";
 import { rateLimit, sanitizeInput } from "@/lib/rate-limit";
+import { recordSmsConsent } from "@/lib/sms-consent";
 
 /**
  * Joining the cancellation waitlist.
@@ -26,6 +27,11 @@ const joinSchema = z.object({
     .trim()
     .min(7, "That phone number looks too short")
     .max(30),
+  /**
+   * Did they tick the SMS opt-in? Optional: the whole point of the list is a
+   * text, but consent still can't be a condition of joining it.
+   */
+  smsConsent: z.boolean().optional().default(false),
 });
 
 export async function joinWaitlist(input: {
@@ -36,6 +42,7 @@ export async function joinWaitlist(input: {
   timePreference: string;
   clientName: string;
   clientPhone: string;
+  smsConsent?: boolean;
 }): Promise<{ success: true } | { error: string }> {
   const parsed = joinSchema.safeParse(input);
   if (!parsed.success) {
@@ -55,6 +62,14 @@ export async function joinWaitlist(input: {
     select: { id: true },
   });
   if (!shop) return { error: "Shop not found" };
+
+  // Ahead of the duplicate branch below, which returns early — someone who
+  // ticks the box on a second attempt still gets recorded. Entries store the
+  // phone as typed; recordSmsConsent normalises, which is the form sendSms
+  // looks consent up by.
+  if (parsed.data.smsConsent) {
+    await recordSmsConsent(shop.id, d.clientPhone, "waitlist");
+  }
 
   // Same person, same day, already waiting — don't create a duplicate that
   // would text them twice for one opening.

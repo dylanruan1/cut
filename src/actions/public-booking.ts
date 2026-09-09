@@ -8,6 +8,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { rateLimit, sanitizeInput } from "@/lib/rate-limit";
 import { normalizePhone, sendSms, buildBookingConfirmationSms } from "@/lib/twilio";
+import { recordSmsConsent } from "@/lib/sms-consent";
 import { formatTime, formatShortDate } from "@/lib/dates";
 import { resolveShopTimezone } from "@/lib/datetime";
 import {
@@ -420,6 +421,13 @@ const bookingSchema = z.object({
   phone: z.string().min(10, "Please enter a valid phone number").max(20),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
   notes: z.string().max(500).optional(),
+  /**
+   * Did they tick the SMS opt-in? Optional and defaulted to false because
+   * consent is not a condition of booking — an unticked box books normally and
+   * simply gets no texts. Coerced through zod like everything else so a
+   * hand-crafted "true" string can't manufacture consent.
+   */
+  smsConsent: z.boolean().optional().default(false),
 });
 
 export type PublicBookingResult = {
@@ -594,6 +602,13 @@ export async function createPublicBooking(
       return { error: DOUBLE_BOOKING_MESSAGE };
     }
     throw error;
+  }
+
+  // Before the deposit branch: the deposit path leaves here for Stripe and the
+  // webhook texts the confirmation later, so consent has to be on record by
+  // then or that text is silently dropped.
+  if (parsed.data.smsConsent) {
+    await recordSmsConsent(shop.id, phone, "booking");
   }
 
   const when = `${formatShortDate(start, timezone)} at ${formatTime(start, timezone)}`;

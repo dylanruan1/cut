@@ -455,6 +455,9 @@ const prismaMock = vi.hoisted(() => ({
   notification: {
     create: vi.fn(),
   },
+  smsConsent: {
+    upsert: vi.fn(),
+  },
   receptionistCallSession: {
     findUnique: vi.fn(),
     create: vi.fn(),
@@ -492,10 +495,100 @@ describe("executeBooking caller name vs existing client", () => {
       startTime: new Date("2026-07-11T22:00:00.000Z"),
     });
     prismaMock.notification.create.mockResolvedValue({});
+    prismaMock.smsConsent.upsert.mockResolvedValue({});
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  // A phone booking has no checkbox — the yes was spoken. Without this row
+  // sendSms refuses, and the caller never gets the confirmation they were
+  // promised on the call.
+  it("records verbal SMS consent for the caller's number", async () => {
+    prismaMock.client.findUnique.mockResolvedValue({
+      id: "client_dylan",
+      name: "Dylan",
+      phone: "+15559876543",
+      barbershopId: "shop_1",
+    });
+
+    const { executeBooking } = await import("@/lib/ai-receptionist/booking");
+
+    const result = await executeBooking({
+      shop: shopFixture,
+      callerPhone: "+15559876543",
+      parsed: {
+        intent: "book_appointment",
+        clientName: "Dylan",
+        serviceName: "Haircut",
+        preferredDate: "2026-07-11",
+        preferredTime: "15:00",
+        anyBarber: true,
+        confirmed: true,
+        rawText: "yes",
+        confidence: 0.95,
+        missingFields: [],
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(prismaMock.smsConsent.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          barbershopId_phone: {
+            barbershopId: "shop_1",
+            phone: "+15559876543",
+          },
+        },
+        create: expect.objectContaining({ source: "phone" }),
+        // Repeat callers keep their original consent date.
+        update: {},
+      })
+    );
+  });
+
+  // Consent must be on record before the confirmation goes out, not after.
+  it("records consent before the confirmation text is sent", async () => {
+    prismaMock.client.findUnique.mockResolvedValue({
+      id: "client_dylan",
+      name: "Dylan",
+      phone: "+15559876543",
+      barbershopId: "shop_1",
+    });
+
+    const order: string[] = [];
+    prismaMock.smsConsent.upsert.mockImplementation(async () => {
+      order.push("consent");
+      return {};
+    });
+    const { sendReceptionistSms } = await import("@/lib/ai-receptionist/sms");
+    vi.mocked(sendReceptionistSms).mockImplementation(async () => {
+      order.push("sms");
+      return { success: true };
+    });
+
+    const { executeBooking } = await import("@/lib/ai-receptionist/booking");
+
+    await executeBooking({
+      shop: shopFixture,
+      callerPhone: "+15559876543",
+      parsed: {
+        intent: "book_appointment",
+        clientName: "Dylan",
+        serviceName: "Haircut",
+        preferredDate: "2026-07-11",
+        preferredTime: "15:00",
+        anyBarber: true,
+        confirmed: true,
+        rawText: "yes",
+        confidence: 0.95,
+        missingFields: [],
+      },
+    });
+
+    expect(order).toEqual(["consent", "sms"]);
+    vi.mocked(sendReceptionistSms).mockResolvedValue({ success: true });
   });
 
   it("preserves Dylan client when same phone books as Jeff; stores Jeff snapshot", async () => {

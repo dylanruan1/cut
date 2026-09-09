@@ -155,6 +155,7 @@ model Barbershop {
   invitations              Invitation[]
   notifications            Notification[]
   smsLogs                  SmsLog[]
+  smsConsents              SmsConsent[]
   receptionistCallSessions ReceptionistCallSession[]
   queueEntries             QueueEntry[]
   waitlistEntries          WaitlistEntry[]
@@ -492,6 +493,32 @@ model ShopSlugAlias {
 /// matter which shop is asking. Twilio already blocks these at its edge, but
 /// without this table the app never learns and keeps queueing sends that go
 /// nowhere.
+/// Proof that a specific number agreed to be texted by a specific shop.
+///
+/// Carriers require affirmative opt-in: a deliberate act, not a line of small
+/// print under a Book button. A2P campaign 30925 was rejected precisely for
+/// that. A row here is that act — written only when someone ticked the consent
+/// box themselves, or said yes to the receptionist on the phone.
+///
+/// Scoped per shop because that is what the customer agreed to: texts from
+/// Fades Barbershop, not from every shop on Cut. Opting out (SmsOptOut) is
+/// deliberately global instead, matching how carriers treat STOP.
+model SmsConsent {
+  id           String   @id @default(cuid())
+  barbershopId String
+  /// E.164, as normalizePhone produces.
+  phone        String
+  /// Where the consent came from: booking / queue / waitlist / phone.
+  /// Kept because a carrier audit asks how, not just whether.
+  source       String
+  consentedAt  DateTime @default(now())
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@unique([barbershopId, phone])
+  @@map("sms_consents")
+}
+
 model SmsOptOut {
   /// E.164, as normalizePhone produces.
   phone     String   @id

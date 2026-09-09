@@ -106,10 +106,10 @@ export default async function BarberBookingPage({ params }: Props) {
       <footer className="container mx-auto max-w-2xl space-y-3 px-4 pb-10 text-center">
         {/* A2P 10DLC disclosure — same requirement as the shop page. */}
         <p className="text-xs leading-relaxed text-muted-foreground">
-          By booking or joining the waitlist you agree to receive appointment
-          text messages from {shop.name} at the number you provide. Message
-          frequency varies. Message and data rates may apply. Reply STOP to opt
-          out or HELP for help.
+          Tick the box when you book or join the waitlist and {shop.name} will
+          send appointment text messages to the number you provide. Opting in is
+          not required to book. Message frequency varies. Message and data rates
+          may apply. Reply STOP to opt out or HELP for help.
         </p>
         <p className="text-xs text-muted-foreground">
           <a href="/privacy" className="underline underline-offset-2">

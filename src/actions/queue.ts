@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { rateLimit, sanitizeInput } from "@/lib/rate-limit";
 import { normalizePhone, sendSms } from "@/lib/twilio";
+import { recordSmsConsent } from "@/lib/sms-consent";
 import { canUseCalendar } from "@/lib/subscription";
 import { verifyPin } from "@/lib/barber-pin";
 import { getStripe, getAppUrl } from "@/lib/stripe";
@@ -233,6 +234,8 @@ export async function joinQueue(input: {
   barberId?: string | null;
   name: string;
   phone: string;
+  /** Did they tick the SMS opt-in? Never required — the line works either way. */
+  smsConsent?: boolean;
 }): Promise<JoinResult> {
   const limited = rateLimit(await clientKey("queue:join"), 10, 60_000);
   if (!limited.success) {
@@ -281,6 +284,13 @@ export async function joinQueue(input: {
   }
 
   const phone = normalizePhone(phoneRaw);
+
+  // Strict true only — anything else from an unauthenticated caller is not a
+  // tick. Recorded before the duplicate check below so someone who rejoins and
+  // ticks the box this time still gets their consent written down.
+  if (input.smsConsent === true) {
+    await recordSmsConsent(shop.id, phone, "queue");
+  }
 
   // Don't let one person stack multiple places in line.
   const existing = await prisma.queueEntry.findFirst({

@@ -78,12 +78,14 @@ export default async function QueuePage({ params }: Props) {
       </main>
 
       <footer className="container mx-auto max-w-lg space-y-3 px-4 pb-10 text-center">
-        {/* A2P 10DLC disclosure — see the twin in /book/[slug]/page.tsx. */}
+        {/* A2P 10DLC disclosure — see the twin in /book/[slug]/page.tsx.
+            Describes the programme only. The act of consent is the checkbox in
+            the form above; this copy must never claim joining implies it. */}
         <p className="text-xs leading-relaxed text-muted-foreground">
-          By joining the line you agree to receive text messages about your
-          place in the queue from {shop.name} at the number you provide.
-          Message frequency varies. Message and data rates may apply. Reply
-          STOP to opt out or HELP for help.
+          Tick the box above and {shop.name} will text you about your place in
+          the queue at the number you provide. Opting in is not required to
+          join the line. Message frequency varies. Message and data rates may
+          apply. Reply STOP to opt out or HELP for help.
         </p>
         <p className="text-xs text-muted-foreground">
           <a href="/privacy" className="underline underline-offset-2">

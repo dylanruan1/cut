@@ -93,6 +93,33 @@ export async function sendSms(
     console.error("[twilio] opt-out check failed, sending anyway", error);
   }
 
+  // No affirmative consent, no message. Queried here rather than through
+  // @/lib/sms-consent to avoid an import cycle — that module needs
+  // normalizePhone from this one.
+  //
+  // Unlike the opt-out check above, a failed lookup blocks the send. Twilio
+  // enforces opt-out for us; nobody enforces consent but this line, and
+  // texting someone who never agreed is the thing carriers suspend brands
+  // over.
+  try {
+    const { default: prisma } = await import("@/lib/db");
+    const consent = await prisma.smsConsent.findUnique({
+      where: { barbershopId_phone: { barbershopId, phone: normalisedTo } },
+      select: { id: true },
+    });
+    if (!consent) {
+      console.warn("[twilio] SMS skipped — no recorded consent", {
+        to: normalisedTo,
+        barbershopId,
+        type,
+      });
+      return { success: false, error: "No SMS consent on record" };
+    }
+  } catch (error) {
+    console.error("[twilio] consent check failed, not sending", error);
+    return { success: false, error: "Consent check failed" };
+  }
+
   try {
     const client = getTwilioClient();
     // A2P 10DLC: sending via the registered Messaging Service is what

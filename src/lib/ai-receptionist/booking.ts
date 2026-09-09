@@ -14,6 +14,7 @@ import {
 import { describeBookingForVoice } from "./prompts";
 import { isDoubleBookingError } from "@/lib/booking-conflict";
 import { buildManageUrl } from "@/lib/twilio";
+import { recordSmsConsent } from "@/lib/sms-consent";
 import { getStripe, getAppUrl } from "@/lib/stripe";
 import { buildDepositCheckoutParams, toCents } from "@/lib/stripe-connect";
 import { sendReceptionistSms } from "./sms";
@@ -386,6 +387,12 @@ export async function executeBooking(input: ExecuteBookingInput): Promise<Bookin
     }
     throw error;
   }
+
+  // There is no checkbox on a phone call. The caller reached a confirmed
+  // booking by saying yes out loud on a recorded line, which is the verbal
+  // opt-in carriers accept — record it, or sendSms drops both the deposit link
+  // and the confirmation this booking depends on.
+  await recordSmsConsent(shop.id, callerPhone, "phone");
 
   await prisma.notification.create({
     data: {

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { joinWaitlist } from "@/actions/waitlist";
+import { SmsConsentCheckbox } from "@/components/shared/sms-consent-checkbox";
 import { TIME_PREFERENCE_LABELS } from "@/lib/waitlist";
 
 /**
@@ -16,6 +17,7 @@ import { TIME_PREFERENCE_LABELS } from "@/lib/waitlist";
  */
 export function WaitlistPrompt({
   slug,
+  shopName,
   serviceId,
   barberId,
   date,
@@ -24,6 +26,8 @@ export function WaitlistPrompt({
   defaultPhone = "",
 }: {
   slug: string;
+  /** Named in the opt-in line — consent is to a shop, not to Cut. */
+  shopName: string;
   serviceId: string;
   barberId?: string;
   /** Shop-local YYYY-MM-DD. */
@@ -35,6 +39,7 @@ export function WaitlistPrompt({
 }) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
+  const [smsConsent, setSmsConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -52,6 +57,7 @@ export function WaitlistPrompt({
         timePreference: String(data.get("timePreference") ?? "ANY"),
         clientName: String(data.get("clientName") ?? ""),
         clientPhone: String(data.get("clientPhone") ?? ""),
+        smsConsent,
       });
       if ("error" in res) {
         setError(res.error);
@@ -69,8 +75,9 @@ export function WaitlistPrompt({
           <div>
             <p className="text-sm font-medium">You&apos;re on the list</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              If something opens on {dayLabel}, we&apos;ll text you. Several
-              people may get the same message, so book quickly.
+              {smsConsent
+                ? `If something opens on ${dayLabel}, we'll text you. Several people may get the same message, so book quickly.`
+                : `We'll hold your spot on the list for ${dayLabel}. You didn't opt into texts, so check back to see if anything opened.`}
             </p>
           </div>
         </div>
@@ -139,21 +146,16 @@ export function WaitlistPrompt({
         </p>
       </div>
 
-      {/* A2P 10DLC call to action — required anywhere a number is collected
-          for texting. */}
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        By joining the list, you agree to receive a text if a spot opens.
-        Message frequency varies. Message and data rates may apply. Reply STOP
-        to opt out or HELP for help. See our{" "}
-        <a href="/privacy" className="underline underline-offset-2" target="_blank" rel="noreferrer">
-          Privacy Policy
-        </a>{" "}
-        and{" "}
-        <a href="/terms" className="underline underline-offset-2" target="_blank" rel="noreferrer">
-          Terms
-        </a>
-        .
-      </p>
+      {/* A2P 10DLC call to action — an affirmative tick anywhere a number is
+          collected for texting. Optional even here, where the text is the
+          entire point: consent can't be the price of joining. */}
+      <SmsConsentCheckbox
+        checked={smsConsent}
+        onChange={setSmsConsent}
+        shopName={shopName}
+        context="waitlist"
+        id="sms-consent-waitlist"
+      />
 
       {error && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -168,8 +170,10 @@ export function WaitlistPrompt({
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Adding you…
             </>
-          ) : (
+          ) : smsConsent ? (
             "Text me if it opens"
+          ) : (
+            "Add me to the list"
           )}
         </Button>
         <Button
