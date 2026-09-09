@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { PLAN_DISPLAY } from "@/lib/subscription";
+import { DEMO_SHOP_SLUG } from "@/lib/shop-constants";
 
 export const metadata: Metadata = {
   title: "Cut. — the phone answers itself",
@@ -78,6 +79,17 @@ export default function HomePage() {
                 className="text-base font-bold uppercase tracking-wide underline underline-offset-4"
               >
                 Pricing
+              </Link>
+              {/* Reachable demo of the customer-facing booking page. Kept in the
+                  hero deliberately: carrier reviewers verifying the SMS call to
+                  action need to reach a page where a number is collected, and
+                  every real booking page lives behind a shop slug they have no
+                  way to guess. */}
+              <Link
+                href={`/book/${DEMO_SHOP_SLUG}`}
+                className="text-base font-bold uppercase tracking-wide underline underline-offset-4"
+              >
+                See a demo booking
               </Link>
             </div>
           </div>
@@ -212,6 +224,12 @@ export default function HomePage() {
             </Link>
             <Link href="/support" className="hover:underline">
               Support
+            </Link>
+            <Link
+              href={`/book/${DEMO_SHOP_SLUG}`}
+              className="hover:underline"
+            >
+              Demo booking
             </Link>
             <Link href="/privacy" className="hover:underline">
               Privacy
