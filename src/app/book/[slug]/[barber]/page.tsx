@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Scissors, MapPin, Phone } from "lucide-react";
-import { getPublicShop } from "@/actions/public-booking";
+import { getPublicShop, lookupPublicShop } from "@/actions/public-booking";
+import { ShopUnavailable } from "@/components/booking/shop-unavailable";
 import { resolveSlugAlias } from "@/lib/shop-slug";
 import { BookingWizard } from "@/components/booking/booking-wizard";
 import { PoweredByCut } from "@/components/shared/powered-by-cut";
@@ -38,13 +39,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function BarberBookingPage({ params }: Props) {
   const { slug, barber: barberSlug } = await params;
-  const shop = await getPublicShop(slug);
+  const lookup = await lookupPublicShop(slug);
 
-  if (!shop) {
+  if (lookup.status === "missing") {
     const current = await resolveSlugAlias(slug);
     if (current) redirect(`/book/${current}/${barberSlug}`);
     notFound();
   }
+
+  // Same as the shop page: a real shop that can't take bookings is not a
+  // mistyped link, and must not be reported as one.
+  if (lookup.status === "unavailable") {
+    return (
+      <ShopUnavailable
+        shopName={lookup.shopName}
+        shopPhone={lookup.shopPhone}
+        reason={lookup.reason}
+      />
+    );
+  }
+
+  const shop = lookup.shop;
 
   const barber = shop.barbers.find((b) => b.slug === barberSlug);
   // A barber who left, was deactivated, or never got a handle: fall back to

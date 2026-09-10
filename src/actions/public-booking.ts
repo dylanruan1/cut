@@ -180,10 +180,46 @@ async function clientKey(prefix: string): Promise<string> {
   return `${prefix}:${ip}`;
 }
 
+/**
+ * Why a slug has no bookable shop behind it.
+ *
+ * "missing" and "unavailable" look identical to `getPublicShop`, which is how
+ * a shop that deleted its starter services — or whose trial lapsed — ended up
+ * serving its own customers a 404 reading "the link may be mistyped". The link
+ * was fine. Telling someone they typed it wrong when they didn't sends them to
+ * the shop down the road, and the owner never hears about it.
+ */
+export type PublicShopLookup =
+  | { status: "ok"; shop: PublicShop }
+  | { status: "missing" }
+  | {
+      status: "unavailable";
+      /** "setup" = nothing to book yet; "inactive" = subscription lapsed. */
+      reason: "setup" | "inactive";
+      shopName: string;
+      /** So the page can tell them to ring the shop instead. */
+      shopPhone: string | null;
+    };
+
 /** Loads a shop's public booking profile by slug. Returns null when unavailable. */
 export async function getPublicShop(slug: string): Promise<PublicShop | null> {
+  const result = await lookupPublicShop(slug);
+  return result.status === "ok" ? result.shop : null;
+}
+
+/**
+ * As `getPublicShop`, but says why there is nothing to show.
+ *
+ * Pages that a customer lands on use this so they can distinguish a bad link
+ * from a shop that simply isn't taking online bookings yet. The booking and
+ * availability actions keep using `getPublicShop`, where every one of these
+ * cases correctly means "no".
+ */
+export async function lookupPublicShop(
+  slug: string
+): Promise<PublicShopLookup> {
   const clean = slug.trim().toLowerCase();
-  if (!clean) return null;
+  if (!clean) return { status: "missing" };
 
   const shop = await prisma.barbershop.findUnique({
     where: { slug: clean },
@@ -215,16 +251,36 @@ export async function getPublicShop(slug: string): Promise<PublicShop | null> {
     },
   });
 
-  if (!shop) return null;
-  // Unpaid/cancelled shops don't get a public booking page.
-  if (!canUseCalendar(shop)) return null;
-  if (shop.services.length === 0 || shop.barbers.length === 0) return null;
+  if (!shop) return { status: "missing" };
+
+  // Unpaid/cancelled shops don't get a public booking page. The shop exists
+  // though, so the customer is told to ring instead of being told the link is
+  // wrong.
+  if (!canUseCalendar(shop)) {
+    return {
+      status: "unavailable",
+      reason: "inactive",
+      shopName: shop.name,
+      shopPhone: shop.phone,
+    };
+  }
+
+  // Nothing to book. Usually a shop mid-setup, or one that deleted the starter
+  // services to add its own and hasn't finished.
+  if (shop.services.length === 0 || shop.barbers.length === 0) {
+    return {
+      status: "unavailable",
+      reason: "setup",
+      shopName: shop.name,
+      shopPhone: shop.phone,
+    };
+  }
 
   // Deposits require both an active connected payout account and the switch on.
   const depositsEnabled =
     shop.depositsEnabled && shop.connectStatus === "ACTIVE";
 
-  return {
+  const publicShop: PublicShop = {
     id: shop.id,
     name: shop.name,
     slug: shop.slug,
@@ -264,6 +320,8 @@ export async function getPublicShop(slug: string): Promise<PublicShop | null> {
       isClosed: h.isClosed,
     })),
   };
+
+  return { status: "ok", shop: publicShop };
 }
 
 const slotsSchema = z.object({

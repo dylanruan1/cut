@@ -3,7 +3,10 @@ import { getDashboardData } from "@/actions/appointments";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { formatDate } from "@/lib/dates";
 import { getSetupChecklist } from "@/lib/setup-checklist";
-import { SetupChecklistCard } from "@/components/dashboard/setup-checklist";
+import {
+  SetupChecklistCard,
+  BookingLinkDeadBanner,
+} from "@/components/dashboard/setup-checklist";
 
 export default async function DashboardPage() {
   const { user } = await requireActiveSubscription();
@@ -22,6 +25,7 @@ export default async function DashboardPage() {
           {formatDate(new Date(), user.barbershop.timezone)} · {user.barbershop.name}
         </p>
       </div>
+      <BookingLinkDeadBanner checklist={checklist} />
       <SetupChecklistCard checklist={checklist} />
       <DashboardContent data={data} timezone={user.barbershop.timezone} />
     </div>

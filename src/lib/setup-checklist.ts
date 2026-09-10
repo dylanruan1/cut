@@ -24,6 +24,16 @@ export type SetupChecklist = {
   doneCount: number;
   total: number;
   complete: boolean;
+  /**
+   * The public booking link currently shows customers "not booking online
+   * yet" instead of a booking form.
+   *
+   * Worth saying out loud rather than leaving as an unticked checklist line:
+   * the link is already printed on stickers and sitting in Instagram bios, so
+   * a shop can be quietly turning people away — most often after deleting the
+   * starter services to add its own.
+   */
+  bookingLinkDead: boolean;
 };
 
 export async function getSetupChecklist(
@@ -125,9 +135,12 @@ export async function getSetupChecklist(
     },
   ];
 
+  const bookingLinkDead = serviceCount === 0 || barberCount === 0;
+
   const doneCount = items.filter((i) => i.done).length;
   return {
     items,
+    bookingLinkDead,
     doneCount,
     total: items.length,
     complete: doneCount === items.length,

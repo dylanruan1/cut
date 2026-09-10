@@ -4,9 +4,11 @@ import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import {
   getPublicShop,
+  lookupPublicShop,
   getDepositConfirmation,
 } from "@/actions/public-booking";
 import { BookingWizard } from "@/components/booking/booking-wizard";
+import { ShopUnavailable } from "@/components/booking/shop-unavailable";
 import { Scissors, MapPin, Phone, Check } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -40,9 +42,9 @@ export default async function PublicBookingPage({
 }: Props) {
   const { slug } = await params;
   const { deposit, appointment: appointmentId } = await searchParams;
-  const shop = await getPublicShop(slug);
+  const lookup = await lookupPublicShop(slug);
 
-  if (!shop) {
+  if (lookup.status === "missing") {
     // The shop may have been renamed since this link was shared — on a QR
     // sticker, in an Instagram bio, or in a confirmation text already sent.
     // Retired slugs redirect rather than 404.
@@ -50,6 +52,20 @@ export default async function PublicBookingPage({
     if (current) redirect(`/book/${current}`);
     notFound();
   }
+
+  // A real shop that can't take bookings. Only "missing" above is a bad link,
+  // and only that one gets the 404 telling them so.
+  if (lookup.status === "unavailable") {
+    return (
+      <ShopUnavailable
+        shopName={lookup.shopName}
+        shopPhone={lookup.shopPhone}
+        reason={lookup.reason}
+      />
+    );
+  }
+
+  const shop = lookup.shop;
 
   // Returning from Stripe Checkout after paying a deposit.
   const paid =

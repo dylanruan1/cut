@@ -15,6 +15,43 @@ const DISMISS_KEY = "cut:setup-checklist-dismissed";
  * Hidden once everything is done, or once the owner dismisses it — a shop that
  * doesn't want walk-ins shouldn't stare at an unfinishable list forever.
  */
+/**
+ * Warning that the shop's public booking link is currently turning customers
+ * away.
+ *
+ * Deliberately separate from the checklist card, and deliberately not
+ * dismissible: the checklist is first-run guidance you can reasonably ignore,
+ * this is a live fault. It most often appears after a shop deletes the starter
+ * services to add its own, at which point the link on its stickers and in its
+ * Instagram bio silently stops taking bookings.
+ */
+export function BookingLinkDeadBanner({
+  checklist,
+}: {
+  checklist: SetupChecklist;
+}) {
+  if (!checklist.bookingLinkDead) return null;
+
+  return (
+    <Card className="border-destructive/40 bg-destructive/[0.04]">
+      <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-semibold tracking-tight">
+            Your booking link isn&apos;t taking bookings
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Anyone opening it sees &ldquo;not booking online yet&rdquo;. You
+            need at least one service and one barber before customers can book.
+          </p>
+        </div>
+        <Button asChild className="shrink-0">
+          <Link href="/services">Add a service</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SetupChecklistCard({ checklist }: { checklist: SetupChecklist }) {
   const [dismissed, setDismissed] = useState(true); // assume hidden until checked
 
