@@ -292,6 +292,39 @@ export async function getAppointments(start: string, end: string, barberId?: str
   return serializeForClient(appointments);
 }
 
+/**
+ * Makes a newly created service bookable.
+ *
+ * `barberPerformsService` reads an empty assignment list as "performs
+ * everything" and a non-empty one as exclusive. Shop creation writes explicit
+ * rows for the owner, so without this the owner's list stays frozen at the
+ * three starter services: every service added afterwards is offered on the
+ * booking page, returns no availability for fourteen days, and shows the
+ * customer "fully booked" with no error on either side.
+ *
+ * Only barbers who ALREADY have explicit assignments get a row. Giving one to
+ * a barber with none — invited barbers, who currently perform everything —
+ * would flip them from "everything" to "only this new service", which is the
+ * same bug pointed the other way.
+ */
+async function linkServiceToExistingBarbers(
+  barbershopId: string,
+  serviceId: string
+): Promise<void> {
+  const assigned = await prisma.barberService.findMany({
+    where: { barber: { barbershopId } },
+    select: { barberId: true },
+    distinct: ["barberId"],
+  });
+
+  if (assigned.length === 0) return;
+
+  await prisma.barberService.createMany({
+    data: assigned.map(({ barberId }) => ({ barberId, serviceId })),
+    skipDuplicates: true,
+  });
+}
+
 export async function createService(data: unknown) {
   const user = await requireShopUser();
   if (!canManageShop(user.role)) return { error: "Unauthorized" };
@@ -314,6 +347,8 @@ export async function createService(data: unknown) {
           : null,
     },
   });
+
+  await linkServiceToExistingBarbers(user.barbershopId, service.id);
 
   revalidatePath("/services");
   return { success: true, service: serializeForClient(service) };

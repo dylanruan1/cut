@@ -6,8 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { updateShopSettings } from "@/actions/appointments";
+import { setBusinessHours } from "@/actions/business-hours";
+import {
+  toFullWeek,
+  openDayCount,
+  type BusinessHourInput,
+} from "@/lib/business-hours";
 import { toast } from "@/hooks/use-toast";
 import { DAYS_OF_WEEK } from "@/lib/dates";
 import { getVoiceWebhookUrl } from "@/lib/voice-webhook";
@@ -107,6 +114,22 @@ export function SettingsForm({
 
   const [copied, setCopied] = useState(false);
 
+  // Always a complete week, even for a shop whose seeding never ran or only
+  // half-wrote — a missing day would otherwise read as "closed" and quietly
+  // disappear from the booking page.
+  const [hours, setHours] = useState<BusinessHourInput[]>(() =>
+    toFullWeek(
+      businessHours.map((h) => ({
+        dayOfWeek: h.dayOfWeek,
+        openTime: h.openTime,
+        closeTime: h.closeTime,
+        isClosed: h.isClosed,
+      }))
+    )
+  );
+  const [hoursLoading, setHoursLoading] = useState(false);
+  const [hoursError, setHoursError] = useState<string | null>(null);
+
   const webhookUrl = useMemo(
     () => voiceWebhookUrl || getVoiceWebhookUrl(),
     [voiceWebhookUrl]
@@ -173,6 +196,33 @@ export function SettingsForm({
       toast({ title: "Saved", description: "Phone setup updated" });
       router.refresh();
     }
+  }
+
+  function updateHours(dayOfWeek: number, patch: Partial<BusinessHourInput>) {
+    setHours((prev) =>
+      prev.map((d) => (d.dayOfWeek === dayOfWeek ? { ...d, ...patch } : d))
+    );
+  }
+
+  async function handleHoursSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setHoursError(null);
+    setHoursLoading(true);
+    const result = await setBusinessHours(hours);
+    setHoursLoading(false);
+    if ("error" in result) {
+      // Kept on screen as well as toasted: validation errors name the day at
+      // fault, and a toast is gone before you've scrolled to it.
+      setHoursError(result.error);
+      toast({ title: "Error", description: result.error, variant: "destructive" });
+      return;
+    }
+    const open = openDayCount(hours);
+    toast({
+      title: "Hours saved",
+      description: `Open ${open} ${open === 1 ? "day" : "days"} a week.`,
+    });
+    router.refresh();
   }
 
   const selectedMethodHelp = SETUP_METHODS.find((m) => m.value === setupMethod);
@@ -474,23 +524,124 @@ export function SettingsForm({
           <Card>
             <CardHeader>
               <CardTitle>Business Hours</CardTitle>
-              <CardDescription>When your shop is open</CardDescription>
+              <CardDescription>
+                Customers can only book inside these hours. Days switched off
+                never appear as available.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {businessHours.map((hour) => (
-                  <div key={hour.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/30">
-                    <span className="font-medium text-sm w-24">{DAYS_OF_WEEK[hour.dayOfWeek]}</span>
-                    {hour.isClosed ? (
-                      <span className="text-sm text-muted-foreground">Closed</span>
-                    ) : (
-                      <span className="text-sm">
-                        {hour.openTime} – {hour.closeTime}
-                      </span>
-                    )}
+              <form onSubmit={handleHoursSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  {hours.map((day) => {
+                    const name = DAYS_OF_WEEK[day.dayOfWeek];
+                    return (
+                      <div
+                        key={day.dayOfWeek}
+                        className="rounded-xl bg-muted/30 p-3 space-y-3 sm:flex sm:items-center sm:gap-4 sm:space-y-0"
+                      >
+                        {/* Day name and its on/off switch share a line on
+                            mobile so the time inputs get the width below. */}
+                        <div className="flex items-center justify-between gap-3 sm:w-40 sm:shrink-0 sm:justify-start">
+                          <Label
+                            htmlFor={`day-${day.dayOfWeek}`}
+                            className={`text-sm font-medium ${
+                              day.isClosed ? "text-muted-foreground" : ""
+                            }`}
+                          >
+                            {name}
+                          </Label>
+                          <Switch
+                            id={`day-${day.dayOfWeek}`}
+                            checked={!day.isClosed}
+                            onCheckedChange={(open) =>
+                              updateHours(day.dayOfWeek, { isClosed: !open })
+                            }
+                            disabled={!canManage}
+                            aria-label={`${name} open`}
+                          />
+                        </div>
+
+                        {day.isClosed ? (
+                          <p className="text-sm text-muted-foreground sm:flex-1">
+                            Closed
+                          </p>
+                        ) : (
+                          // Two columns on a phone rather than a single row
+                          // with a "to" between them: at 375px a row of two
+                          // 16px time inputs plus a separator overflows the
+                          // card. min-w-0 lets them actually shrink.
+                          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-1 sm:items-end sm:gap-3">
+                            <div className="min-w-0 space-y-1">
+                              <Label
+                                htmlFor={`open-${day.dayOfWeek}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                Opens
+                              </Label>
+                              <Input
+                                id={`open-${day.dayOfWeek}`}
+                                type="time"
+                                value={day.openTime}
+                                onChange={(e) =>
+                                  updateHours(day.dayOfWeek, {
+                                    openTime: e.target.value,
+                                  })
+                                }
+                                disabled={!canManage}
+                                className="h-10 w-full min-w-0 px-3"
+                                aria-label={`${name} opening time`}
+                              />
+                            </div>
+                            <div className="min-w-0 space-y-1">
+                              <Label
+                                htmlFor={`close-${day.dayOfWeek}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                Closes
+                              </Label>
+                              <Input
+                                id={`close-${day.dayOfWeek}`}
+                                type="time"
+                                value={day.closeTime}
+                                onChange={(e) =>
+                                  updateHours(day.dayOfWeek, {
+                                    closeTime: e.target.value,
+                                  })
+                                }
+                                disabled={!canManage}
+                                className="h-10 w-full min-w-0 px-3"
+                                aria-label={`${name} closing time`}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {hoursError && (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {hoursError}
                   </div>
-                ))}
-              </div>
+                )}
+
+                {canManage ? (
+                  <div className="space-y-2">
+                    <Button type="submit" disabled={hoursLoading}>
+                      {hoursLoading ? "Saving..." : "Save hours"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Changing hours only affects new bookings. Appointments
+                      already on the calendar stay exactly where they are.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Only shop owners can edit business hours.
+                  </p>
+                )}
+              </form>
             </CardContent>
           </Card>
         </TabsContent>
