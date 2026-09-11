@@ -5,7 +5,9 @@ import { UNCONNECTED_NUMBER_MESSAGE } from "@/lib/ai-receptionist/shop-resolve";
 const prismaMock = vi.hoisted(() => ({
   barbershop: {
     findFirst: vi.fn(),
-    findMany: vi.fn(),
+    // Creating a shop reads every existing slug before picking its own, so
+    // this needs a list by default even in tests that care about nothing else.
+    findMany: vi.fn(async () => []),
     findUnique: vi.fn(),
     findUniqueOrThrow: vi.fn(),
     create: vi.fn(),
@@ -221,6 +223,41 @@ describe("multi-shop onboarding and membership", () => {
         name: "Jeff Owner",
       },
     });
+  });
+
+  it("gives a shop named in another alphabet a usable booking link", async () => {
+    // "Стрижка" has no latin letters, so the old generator produced "" and the
+    // shop's booking link was origin + "/book/".
+    prismaMock.barbershop.findMany.mockResolvedValue([]);
+    prismaMock.shopSlugAlias.findMany.mockResolvedValue([]);
+    prismaMock.barbershop.create.mockResolvedValue({
+      id: "shop_cyrillic",
+      name: "Стрижка",
+      slug: "shop",
+      timezone: "America/Los_Angeles",
+    });
+    prismaMock.barbershopMembership.create.mockResolvedValue({ id: "mem_2" });
+    prismaMock.user.update.mockResolvedValue({});
+    prismaMock.barber.findUnique.mockResolvedValue(null);
+    prismaMock.barber.create.mockResolvedValue({ id: "barber_2" });
+    prismaMock.service.findMany.mockResolvedValue([]);
+    prismaMock.$transaction.mockImplementation(async (ops: unknown) => {
+      if (Array.isArray(ops)) return Promise.all(ops);
+      return ops;
+    });
+
+    const { createBarbershopWithOwner } = await import("@/lib/barbershop");
+    const { validateSlug } = await import("@/lib/booking-slug");
+
+    await createBarbershopWithOwner({
+      name: "Стрижка",
+      ownerUserId: "user_2",
+      ownerName: "Owner",
+      ownerEmail: "owner@example.com",
+    });
+
+    const { slug } = prismaMock.barbershop.create.mock.calls[0][0].data;
+    expect(validateSlug(slug).ok).toBe(true);
   });
 });
 

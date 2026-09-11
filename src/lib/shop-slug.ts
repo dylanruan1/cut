@@ -17,14 +17,14 @@ import { uniqueSlugFor } from "@/lib/booking-slug";
  * Aliases matter as much as live slugs — reusing one would send a customer
  * holding an old link to a completely different barbershop.
  */
-async function takenSlugs(excludeShopId: string): Promise<Set<string>> {
+async function takenSlugs(excludeShopId?: string): Promise<Set<string>> {
   const [shops, aliases] = await Promise.all([
     prisma.barbershop.findMany({
-      where: { id: { not: excludeShopId } },
+      where: excludeShopId ? { id: { not: excludeShopId } } : {},
       select: { slug: true },
     }),
     prisma.shopSlugAlias.findMany({
-      where: { barbershopId: { not: excludeShopId } },
+      where: excludeShopId ? { barbershopId: { not: excludeShopId } } : {},
       select: { slug: true },
     }),
   ]);
@@ -33,6 +33,16 @@ async function takenSlugs(excludeShopId: string): Promise<Set<string>> {
     ...shops.map((s) => s.slug),
     ...aliases.map((a) => a.slug),
   ]);
+}
+
+/**
+ * The link a shop being created should get.
+ *
+ * Same rules as a rename, aliases included — a new shop must never be handed a
+ * link that used to point at someone else's.
+ */
+export async function newShopSlug(name: string): Promise<string> {
+  return uniqueSlugFor(name, await takenSlugs());
 }
 
 /**

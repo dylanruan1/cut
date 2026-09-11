@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -34,15 +34,40 @@ export function PayoutsCard({
   status,
   depositsEnabled,
   canManage,
+  justReturnedFromStripe = false,
 }: {
   status: ConnectStatus;
   depositsEnabled: boolean;
   canManage: boolean;
+  /** Landed here from Stripe's return_url (/settings?payouts=...). */
+  justReturnedFromStripe?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(depositsEnabled);
+  const [checking, setChecking] = useState(justReturnedFromStripe && canManage);
+
+  // Stripe sends the owner straight back, minutes before the account.updated
+  // webhook lands. Until then the status on record is the PENDING we wrote when
+  // setup started, so someone who just finished was told "Setup incomplete" —
+  // and only found out otherwise by guessing at "Check status". Ask Stripe.
+  useEffect(() => {
+    if (!checking) return;
+    let cancelled = false;
+    refreshPayoutStatus()
+      .catch(() => {})
+      .finally(() => {
+        if (cancelled) return;
+        setChecking(false);
+        startTransition(() => router.refresh());
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Runs once on arrival; `checking` only ever goes true -> false.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onConnect() {
     setBusy("connect");
@@ -104,9 +129,14 @@ export function PayoutsCard({
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <StatusRow status={status} />
+        {!checking && <StatusRow status={status} />}
 
-        {status !== "ACTIVE" ? (
+        {checking ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Checking with Stripe…
+          </p>
+        ) : status !== "ACTIVE" ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               {status === "NOT_CONNECTED"

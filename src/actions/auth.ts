@@ -339,7 +339,16 @@ export async function signOut() {
   redirect("/login");
 }
 
-export async function acceptInvite(token: string, name: string, password: string) {
+/**
+ * The invited address is the only one the account can exist under, so it is
+ * returned for the caller to sign in with. Nothing about the email is taken
+ * from the form — the token decides who this is.
+ */
+export async function acceptInvite(
+  token: string,
+  name: string,
+  password: string
+): Promise<{ success?: true; email?: string; error?: string }> {
   const invitation = await prisma.invitation.findUnique({
     where: { token },
     include: { barbershop: true },
@@ -401,5 +410,5 @@ export async function acceptInvite(token: string, name: string, password: string
     }),
   ]);
 
-  return { success: true };
+  return { success: true, email: invitation.email };
 }

@@ -93,6 +93,15 @@ describe("uniqueSlugFor", () => {
     expect(uniqueSlugFor("", new Set(["shop"]))).toBe("shop-2");
   });
 
+  it("rescues a name with no latin letters at all", () => {
+    // Nothing survives toSlug, so the shop would have been created with an
+    // empty slug and a booking link that ended at /book/.
+    for (const name of ["Стрижка", "حلاقة", "剪发", "✂️✂️"]) {
+      const slug = uniqueSlugFor(name, new Set());
+      expect(validateSlug(slug), `${name} -> ${slug}`).toEqual({ ok: true, slug });
+    }
+  });
+
   it("rescues an all-digit name", () => {
     // The exact live case: a shop called 23423423423432.
     const slug = uniqueSlugFor("23423423423432", new Set());

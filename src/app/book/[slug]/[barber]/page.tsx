@@ -66,9 +66,10 @@ export default async function BarberBookingPage({ params }: Props) {
   // the shop's own page rather than a dead end. Their old link still converts.
   if (!barber) redirect(`/book/${shop.slug}`);
 
-  // Hand the wizard a shop containing only this barber. Availability, service
-  // eligibility and the booking action all key off the barber list, so
-  // narrowing it here is enough — no special-casing further down.
+  // Narrowing the list only changes what this page renders. Availability and
+  // booking re-resolve the whole shop from the slug server-side — as they must,
+  // since nothing from the client is trusted — so the barber has to travel with
+  // every request, which is what `lockedBarberId` does.
   const lockedShop = { ...shop, barbers: [barber] };
 
   return (
@@ -115,7 +116,7 @@ export default async function BarberBookingPage({ params }: Props) {
       </header>
 
       <main id="main" className="container mx-auto max-w-2xl px-4 py-8">
-        <BookingWizard shop={lockedShop} />
+        <BookingWizard shop={lockedShop} lockedBarberId={barber.id} />
       </main>
 
       <footer className="container mx-auto max-w-2xl space-y-3 px-4 pb-10 text-center">

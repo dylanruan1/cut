@@ -8,8 +8,15 @@ import { getVoiceWebhookUrl } from "@/lib/voice-webhook";
 import { DangerZone } from "@/components/settings/danger-zone";
 import { BookingLinkCard } from "@/components/settings/booking-link-card";
 
-export default async function SettingsPage() {
+type Props = {
+  searchParams: Promise<{ payouts?: string }>;
+};
+
+export default async function SettingsPage({ searchParams }: Props) {
   const { user, shop: subscription } = await requireActiveSubscription();
+  // Stripe's return_url. The stored status is whatever we wrote when setup
+  // started, so the payouts card re-checks with Stripe before saying anything.
+  const { payouts } = await searchParams;
 
   const [shop, businessHours] = await Promise.all([
     prisma.barbershop.findUnique({ where: { id: user.barbershopId } }),
@@ -29,6 +36,7 @@ export default async function SettingsPage() {
         canManage={isOwner}
         voiceWebhookUrl={getVoiceWebhookUrl()}
         aiUnlocked={canUseAiReceptionist(subscription)}
+        returnedFromPayoutSetup={payouts === "done" || payouts === "refresh"}
       />
       <BookingLinkCard slug={shop?.slug ?? ""} />
 

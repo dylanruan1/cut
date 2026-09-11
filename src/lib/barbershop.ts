@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { Prisma, UserRole, type Barbershop } from "@prisma/client";
 import prisma from "@/lib/db";
 import { DEFAULT_SERVICES } from "@/lib/dates";
-import { generateSlug } from "@/lib/utils";
+import { newShopSlug } from "@/lib/shop-slug";
 import { normalizePhone } from "@/lib/twilio";
 import {
   ACTIVE_SHOP_COOKIE,
@@ -134,9 +134,10 @@ export type CreateShopInput = {
 export async function createBarbershopWithOwner(
   input: CreateShopInput
 ): Promise<Barbershop> {
-  const slugBase = generateSlug(input.name);
-  const existing = await prisma.barbershop.findUnique({ where: { slug: slugBase } });
-  const slug = existing ? `${slugBase}-${Date.now()}` : slugBase;
+  // The same generator a rename uses. A name with no latin letters — Cyrillic,
+  // Arabic, "✂️✂️" — slugged to nothing, and the shop left onboarding with a
+  // booking link that ended at /book/ and nothing anywhere to say so.
+  const slug = await newShopSlug(input.name);
   const timezone = input.timezone?.trim() || DEFAULT_TIMEZONE;
   const twilioPhone = input.twilioPhone
     ? normalizePhone(input.twilioPhone)

@@ -56,6 +56,8 @@ interface SettingsFormProps {
   canManage: boolean;
   voiceWebhookUrl?: string;
   aiUnlocked?: boolean;
+  /** Owner has just come back from Stripe — see PayoutsCard. */
+  returnedFromPayoutSetup?: boolean;
 }
 
 const TIMEZONES = [
@@ -104,6 +106,7 @@ export function SettingsForm({
   canManage,
   voiceWebhookUrl,
   aiUnlocked = false,
+  returnedFromPayoutSetup = false,
 }: SettingsFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -294,6 +297,7 @@ export function SettingsForm({
             status={shop.connectStatus ?? "NOT_CONNECTED"}
             depositsEnabled={Boolean(shop.depositsEnabled)}
             canManage={canManage}
+            justReturnedFromStripe={returnedFromPayoutSetup}
           />
 
           <Card>
@@ -328,7 +332,9 @@ export function SettingsForm({
                     name="timezone"
                     defaultValue={shop.timezone}
                     disabled={!canManage}
-                    className="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm"
+                    // text-base on mobile: see the note in input.tsx — under
+                    // 16px iOS Safari zooms on focus and never zooms back out.
+                    className="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-base sm:text-sm"
                   >
                     {TIMEZONES.map((tz) => (
                       <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
@@ -434,7 +440,7 @@ export function SettingsForm({
                       setSetupMethod((e.target.value as PhoneSetupMethod) || "")
                     }
                     disabled={!canManage}
-                    className="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm"
+                    className="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-base sm:text-sm"
                   >
                     <option value="">Select a method…</option>
                     {SETUP_METHODS.map((method) => (
@@ -469,7 +475,7 @@ export function SettingsForm({
                     name="phoneSetupStatus"
                     defaultValue={connectionStatus}
                     disabled={!canManage}
-                    className="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm"
+                    className="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-base sm:text-sm"
                   >
                     {(Object.keys(STATUS_LABELS) as PhoneSetupStatus[]).map((status) => (
                       <option key={status} value={status}>
@@ -489,7 +495,7 @@ export function SettingsForm({
                       disabled={!canManage}
                       rows={3}
                       placeholder="Carrier account #, authorized name, target port date…"
-                      className="flex w-full rounded-xl border border-input bg-background px-4 py-2 text-sm min-h-[88px]"
+                      className="flex w-full rounded-xl border border-input bg-background px-4 py-2 text-base sm:text-sm min-h-[88px]"
                     />
                     <p className="text-xs text-muted-foreground">
                       Porting happens in Twilio Console / with your carrier — Cut only stores notes.

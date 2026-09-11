@@ -77,10 +77,21 @@ function fullDayLabel(dateKey: string, timezone: string): string {
   }).format(dt);
 }
 
-export function BookingWizard({ shop }: { shop: PublicShop }) {
+export function BookingWizard({
+  shop,
+  lockedBarberId,
+}: {
+  shop: PublicShop;
+  /**
+   * A barber's personal link has already chosen. Their id goes out with every
+   * availability and booking call, because the server re-resolves the full
+   * shop from the slug and would otherwise offer the whole team.
+   */
+  lockedBarberId?: string;
+}) {
   const [step, setStep] = useState<Step>("service");
   const [serviceId, setServiceId] = useState<string>("");
-  const [barberId, setBarberId] = useState<string>("any");
+  const [barberId, setBarberId] = useState<string>(lockedBarberId ?? "any");
   const [dateKey, setDateKey] = useState<string>(() => shopDateKey(0, shop.timezone));
   const [slot, setSlot] = useState<PublicSlot | null>(null);
   const [slots, setSlots] = useState<PublicSlot[]>([]);
@@ -95,6 +106,8 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
   const [pending, startTransition] = useTransition();
 
   const service = shop.services.find((s) => s.id === serviceId);
+  // Nothing to pick on a personal link, or in a shop with one chair.
+  const showBarberStep = !lockedBarberId && shop.barbers.length > 1;
   const days = useMemo(
     () => Array.from({ length: 14 }, (_, i) => shopDateKey(i, shop.timezone)),
     [shop.timezone]
@@ -121,8 +134,11 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
 
   function goBack() {
     setError(null);
-    const i = STEP_ORDER.indexOf(step);
-    if (i > 0) setStep(STEP_ORDER[i - 1]);
+    const previous = STEP_ORDER[STEP_ORDER.indexOf(step) - 1];
+    if (!previous) return;
+    // Going back must not land on a picker we never showed — on a personal
+    // link that would offer "Any available" and undo the lock.
+    setStep(previous === "barber" && !showBarberStep ? "service" : previous);
   }
 
   function submit() {
@@ -209,7 +225,7 @@ export function BookingWizard({ shop }: { shop: PublicShop }) {
                 key={s.id}
                 onClick={() => {
                   setServiceId(s.id);
-                  setStep(shop.barbers.length > 1 ? "barber" : "time");
+                  setStep(showBarberStep ? "barber" : "time");
                 }}
                 className="w-full rounded-xl border bg-card p-4 text-left transition-colors hover:border-primary hover:bg-accent"
               >

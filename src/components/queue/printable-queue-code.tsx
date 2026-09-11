@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
@@ -12,14 +13,32 @@ import { Printer, Copy, Check, ExternalLink } from "lucide-react";
  */
 export function PrintableQueueCode({
   shopName,
-  url,
-  qrSvg,
+  slug,
 }: {
   shopName: string;
-  url: string;
-  qrSvg: string;
+  slug: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [url, setUrl] = useState("");
+  const [qrSvg, setQrSvg] = useState("");
+
+  // Built from window.location.origin rather than NEXT_PUBLIC_APP_URL, like
+  // every other link in the product: that env var has been wrong before, and an
+  // unset one made the URL "/q/fades" — a QR that goes nowhere, printed and
+  // taped to a door, where nothing reports it but customers who stop showing
+  // up. The code has to be drawn here too, since it encodes that URL.
+  useEffect(() => {
+    const next = `${window.location.origin}/q/${slug}`;
+    setUrl(next);
+    QRCode.toString(next, {
+      type: "svg",
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 512,
+    })
+      .then(setQrSvg)
+      .catch(() => toast({ title: "Couldn't draw the QR code", variant: "destructive" }));
+  }, [slug]);
 
   async function copy() {
     try {
@@ -61,11 +80,13 @@ export function PrintableQueueCode({
       </div>
 
       <div className="no-print flex flex-wrap gap-2">
-        <Button onClick={() => window.print()}>
+        {/* Nothing to print until the code is drawn — a blank sign on paper is
+            worse than waiting a moment for it. */}
+        <Button onClick={() => window.print()} disabled={!qrSvg}>
           <Printer className="mr-2 h-4 w-4" />
           Print sign
         </Button>
-        <Button variant="outline" onClick={copy}>
+        <Button variant="outline" onClick={copy} disabled={!url}>
           {copied ? (
             <Check className="mr-2 h-4 w-4" />
           ) : (
@@ -74,7 +95,7 @@ export function PrintableQueueCode({
           {copied ? "Copied" : "Copy link"}
         </Button>
         <Button variant="ghost" asChild>
-          <a href={url} target="_blank" rel="noopener noreferrer">
+          <a href={url || "#"} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="mr-2 h-4 w-4" />
             Preview
           </a>
@@ -100,11 +121,15 @@ export function PrintableQueueCode({
           Scan to join the line. We&apos;ll text you when you&apos;re up.
         </p>
 
-        <div
-          className="mx-auto mt-8 w-full max-w-[300px] [&>svg]:h-auto [&>svg]:w-full"
-          // Server-rendered QR SVG — safe, generated from our own URL.
-          dangerouslySetInnerHTML={{ __html: qrSvg }}
-        />
+        {qrSvg ? (
+          <div
+            className="mx-auto mt-8 w-full max-w-[300px] [&>svg]:h-auto [&>svg]:w-full"
+            // Safe: an SVG we just generated from our own URL.
+            dangerouslySetInnerHTML={{ __html: qrSvg }}
+          />
+        ) : (
+          <div className="mx-auto mt-8 aspect-square w-full max-w-[300px] rounded-xl bg-neutral-100" />
+        )}
 
         <p className="mt-6 break-all font-mono text-xs text-neutral-500">
           {url.replace(/^https?:\/\//, "")}

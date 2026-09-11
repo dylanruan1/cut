@@ -58,11 +58,24 @@ function OnboardingForm() {
     e.preventDefault();
     setLoading(true);
     const formData = new FormData(e.currentTarget);
-    const result = await completeOnboarding(formData);
-    setLoading(false);
 
-    if (result?.error) {
-      toast({ title: "Error", description: result.error, variant: "destructive" });
+    try {
+      const result = await completeOnboarding(formData);
+      if (result?.error) {
+        toast({ title: "Error", description: result.error, variant: "destructive" });
+      }
+    } catch {
+      // completeOnboarding throws rather than returning {error} when the
+      // session has expired. Without this the button sits on "Creating shop…"
+      // forever and never says why — on the one screen a new owner can't skip.
+      toast({
+        title: "Couldn't create your shop",
+        description: "Something went wrong. Please try again, or sign in again.",
+        variant: "destructive",
+      });
+    } finally {
+      // A successful run redirects and never reaches here.
+      setLoading(false);
     }
   }
 
@@ -117,7 +130,9 @@ function OnboardingForm() {
                   id="timezone"
                   name="timezone"
                   defaultValue="America/Los_Angeles"
-                  className="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm"
+                  // text-base on mobile: see the note in input.tsx — under 16px
+                  // iOS Safari zooms on focus and never zooms back out.
+                  className="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-base sm:text-sm"
                   required
                 >
                   {TIMEZONES.map((tz) => (
