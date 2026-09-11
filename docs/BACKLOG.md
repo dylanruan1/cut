@@ -1,6 +1,6 @@
 # Cut — Backlog
 
-Everything identified as outstanding, in one place. Last updated: September 3, 2026.
+Everything identified as outstanding, in one place. Last updated: September 11, 2026.
 
 Legend: **P0** = blocks a real shop using Cut · **P1** = visibly unfinished ·
 **P2** = growth / revenue · **P3** = nice to have
@@ -11,7 +11,7 @@ Legend: **P0** = blocks a real shop using Cut · **P1** = visibly unfinished ·
 
 | # | Item | Notes |
 |---|------|-------|
-| 1 | **Twilio A2P 10DLC campaign** | **Everything SMS is dead until this clears.** Booking confirmations, reminders, queue "you're up" texts, deposit payment links, cancellation links. All built, all correct, all silently blocked (error 30034). Check: Twilio Console → Trust Hub → Registrations → A2P Campaigns. |
+| 1 | **Twilio A2P 10DLC campaign** | **Everything SMS is dead until this clears.** Booking confirmations, reminders, queue "you're up" texts, deposit payment links, cancellation links. All built, all correct, all silently blocked. Rejected five times; the last two were call-to-action failures, now addressed — the home page links to a live booking page and consent is an unticked checkbox rather than small print. `docs/A2P_RESUBMISSION.md` has the history and paste-ready answers. Check: Twilio Console → Trust Hub → Registrations → A2P Campaigns. |
 
 ---
 
@@ -19,7 +19,9 @@ Legend: **P0** = blocks a real shop using Cut · **P1** = visibly unfinished ·
 
 | # | Item | Why it matters |
 |---|------|----------------|
-| 2 | **Walk new-shop onboarding end to end** | signup → create shop → services → barbers → hours → payouts → first booking has *never* been tested by a genuinely new user. Highest-risk untested path, and it's the first thing a real shop touches. |
+| 2 | **Walk new-shop onboarding end to end** | signup → create shop → services → barbers → hours → payouts → first booking has *never* been walked by a genuinely new user. A code audit on Sept 11 found four blockers; three are fixed (see #2b) and one is a decision (#2c). Reading code is not walking it — do this on a phone, from a fresh account. |
+| 2b | ~~**Onboarding blockers found by audit**~~ *(fixed Sept 11)* | Opening hours could not be changed by anyone, so every shop was permanently bookable only Mon–Sat 9–6. A service added after signup was silently unbookable forever — offered on the booking page, no availability for a fortnight, "fully booked" with no error either side. A working booking link told customers it was mistyped when the shop had no services or a lapsed trial. Plus seven smaller ones: personal barber links booked the whole shop, the Stripe Connect return read as failure, onboarding and invite spun forever on error, the invite page ignored the email it collected, a non-Latin shop name produced a dead link, the printed queue QR could encode a relative URL, and iOS zoomed on raw selects. |
+| 2c | **Barber working hours are Pro-gated** | `WorkingHoursDialog` is mounted only inside the Pro-gated Team page, but signup grants Starter — so a new owner cannot set their own hours at all. Shop hours are now editable on every plan; this is the remaining half. **Decision needed: un-gate it, or surface hours outside Team.** |
 | 3 | ~~**Verify analytics math**~~ *(fixed)* | Revenue required status COMPLETED, which nothing ever sets, so it read $0 forever. Now counts appointments that happened and weren't cancelled, plus paid walk-ins, with month boundaries in the shop's timezone rather than the server's. |
 | 4 | ~~**Reminder cron can't run on time**~~ *(fixed)* | The job asked for appointments in a ±15min window exactly 24h/2h out, so a once-daily run texted almost nobody. Now uses wide windows (12–36h and 0–12h) with wording derived from the real time remaining, so one daily run covers everyone. Running it more often only makes it more precise. Optional upgrade: a free external cron (cron-job.org) hitting `/api/cron/reminders` with the `CRON_SECRET` bearer token every 15 min for closer same-day timing. |
 | 5 | **Rotate exposed credentials** | Rotated once. **Anthropic key and Twilio auth token were shown in a screenshot again on Sept 3 and need rotating again.** Those two bill directly and are the ones scrapers use. |
@@ -37,7 +39,8 @@ Legend: **P0** = blocks a real shop using Cut · **P1** = visibly unfinished ·
 | 8 | ~~**Google OAuth**~~ *(done)* | Four stacked causes: a typo in Google's redirect URI, a wrong `NEXT_PUBLIC_APP_URL`, `/auth/callback` missing from middleware's public routes, and two owners racing for the same PKCE verifier. The route handler now owns the flow start to finish. |
 | 9 | ~~**Barber time-off / working-hours editor**~~ *(done)* | Week is replaced wholesale in a transaction — orphaned rows silently blocked bookings. |
 | 10 | ~~**Mobile polish**~~ *(done)* | Inputs were 14px, which made iOS Safari zoom on focus and never zoom back; dialogs had no height cap so Save was unreachable on a phone; calendar opened on a 700px Week grid. |
-| 11 | **Empty states and dashboard copy** | Error boundaries and the booking-page skeleton are now in (Sept 3). Still uneven: the dashboard is the least-considered screen and several empty states just say "No results". |
+| 11 | **Empty states and dashboard copy** | Error boundaries and the booking-page skeleton are in. Still uneven: the dashboard is the least-considered screen and several empty states just say "No results". The dashboard did gain a warning when the booking link is dead (Sept 11), which is the one state that was actively costing bookings. |
+| 11b | **The setup checklist lists things nobody can tick** | "Check your opening hours" completes only when hours deviate from 09:00/18:00, so a shop that genuinely opens 9–6 never can. "Add your barbers" completes only at `barberCount > 1`, so a solo barber never can. The card therefore never goes away except by dismissal. |
 
 ---
 
@@ -71,7 +74,7 @@ Legend: **P0** = blocks a real shop using Cut · **P1** = visibly unfinished ·
 | 27 | Product / retail sales |
 | 28 | Premium voice — move audio to Vapi/Retell + ElevenLabs (current neural Polly is the ceiling for Twilio TTS) |
 | 29 | Stripe Accounts v2 migration (currently on a v1 compatibility toggle) |
-| 30 | Delete 7 duplicate Vercel projects (keep `4u5y3i5…asdlf`) |
+| 30 | ~~Delete 7 duplicate Vercel projects~~ *(done Sept 11 — only `4u5y3i5…asdlf` remains)* |
 | 31 | iPhone home-screen widget (needs a native/PWA companion) |
 
 ---
@@ -91,8 +94,11 @@ Everything that blocks revenue is now an account action, not a coding task.
 4. **#5b, #5c — Stripe live keys, Vercel Pro, Supabase Pro.** ~$45/mo of
    infrastructure plus live Stripe keys is the gap between "demo" and "can take
    a customer's money".
-5. **#2 — walk new-shop onboarding as a genuinely new user**, on a phone.
-6. **#11, #16, #17** — polish and the lock-in features, in that order.
+5. **#2 — walk new-shop onboarding as a genuinely new user**, on a phone. The
+   audit cleared the blockers it could see from the code; the ones left are the
+   kind only real use finds.
+6. **#2c** — the working-hours gating decision. One call, then ten minutes.
+7. **#11, #11b, #16, #17** — polish and the lock-in features, in that order.
 
 ## Cost model (Sept 3, 2026)
 
